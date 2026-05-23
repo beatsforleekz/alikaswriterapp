@@ -80,6 +80,12 @@ export default function ArchiveProgressPage() {
     <div>
       <PageHeader title="Archive Progress" subtitle="Track catalogue reconstruction by year and date range." />
       {errorMsg ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{errorMsg}</p> : null}
+
+      <SectionCard title="What Archive Reviewed Means">
+        <p>Archive Reviewed means you have checked this session for the key admin/evidence items you currently know about.</p>
+        <p className="helper" style={{ marginTop: ".5rem" }}>Reviewed does not mean complete. Missing evidence can still remain after review. Use Evidence Strength to show how strong the evidence currently is.</p>
+      </SectionCard>
+
       <div className="grid cards">
         {years.map((year) => {
           const sRows = sessionsByYear[year] || [];

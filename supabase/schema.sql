@@ -127,6 +127,17 @@ alter table public.contract_records enable row level security;
 alter table public.action_items enable row level security;
 alter table public.archive_progress enable row level security;
 
+grant select, insert, update, delete on public.writers to anon;
+grant select, insert, update, delete on public.song_writer_splits to anon;
+
+drop policy if exists "dev all writers" on public.writers;
+create policy "dev all writers" on public.writers
+for all to anon using (true) with check (true);
+
+drop policy if exists "dev all song_writer_splits" on public.song_writer_splits;
+create policy "dev all song_writer_splits" on public.song_writer_splits
+for all to anon using (true) with check (true);
+
 drop policy if exists "dev select sessions" on public.sessions;
 create policy "dev select sessions" on public.sessions for select to anon using (true);
 drop policy if exists "dev insert sessions" on public.sessions;
@@ -219,4 +230,7 @@ create policy "dev delete archive_progress" on public.archive_progress for delet
 
 alter table public.writers add column if not exists pro text;
 alter table public.writers add column if not exists publisher text;
+alter table public.writers add column if not exists email text;
+alter table public.writers add column if not exists phone text;
+alter table public.writers add column if not exists notes text;
 alter table public.song_writer_splits add column if not exists role text;

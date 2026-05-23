@@ -15,6 +15,7 @@ export default function SongDetail() {
   const [song, setSong] = useState<ReturnType<typeof mapSong> | null>(null);
   const [sessionRef, setSessionRef] = useState<{ id: string; title: string; date: string } | null>(null);
   const [assets, setAssets] = useState<Array<{ id: string; type: string; url?: string | null }>>([]);
+  const [splits, setSplits] = useState<Array<{ id: string; percentage?: number | null; role?: string | null; writer_name: string }>>([]);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -35,6 +36,22 @@ export default function SongDetail() {
 
       const { data: aData } = await supabase.from("asset_links").select("id,type,url").eq("song_id", params.id);
       setAssets((aData ?? []) as Array<{ id: string; type: string; url?: string | null }>);
+
+      const { data: splitRows, error: splitErr } = await supabase
+        .from("song_writer_splits")
+        .select("id,percentage,role,writers(name)")
+        .eq("song_id", params.id);
+      if (splitErr) {
+        logSupabaseError("Failed to load song writer splits", splitErr);
+        setError(supabaseUserMessage("Could not load writer splits", splitErr));
+      } else {
+        setSplits(
+          (splitRows ?? []).map((row) => {
+            const r = row as { id: string; percentage?: number | null; role?: string | null; writers?: { name?: string } | null };
+            return { id: String(r.id), percentage: r.percentage ?? null, role: r.role ?? null, writer_name: String(r.writers?.name ?? "Unknown") };
+          }),
+        );
+      }
     };
     load();
   }, [params.id]);
@@ -57,6 +74,12 @@ export default function SongDetail() {
       <SectionCard title="Evidence">
         {assets.length === 0 ? <p className="helper">No evidence linked.</p> : (
           <div className="tableWrap"><table><thead><tr><th>Type</th><th>Link</th></tr></thead><tbody>{assets.map((a)=><tr key={a.id}><td>{a.type === "bounce" ? "Bounce" : a.type}</td><td>{a.url ? <a href={a.url} target="_blank" rel="noreferrer">Open link</a> : <span className="helper">No URL</span>}</td></tr>)}</tbody></table></div>
+        )}
+      </SectionCard>
+
+      <SectionCard title="Writers / Splits">
+        {splits.length === 0 ? <p className="helper">No writer split rows yet.</p> : (
+          <div className="tableWrap"><table><thead><tr><th>Writer</th><th>Role</th><th>Split %</th></tr></thead><tbody>{splits.map((split)=><tr key={split.id}><td>{split.writer_name}</td><td>{split.role || <span className="helper">No role</span>}</td><td>{split.percentage ?? <span className="helper">auto</span>}</td></tr>)}</tbody></table></div>
         )}
       </SectionCard>
     </div>

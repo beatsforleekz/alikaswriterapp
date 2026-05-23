@@ -46,6 +46,9 @@ export interface Writer {
   name: string;
   pro?: string;
   publisher?: string;
+  email?: string;
+  phone?: string;
+  notes?: string;
 }
 
 export interface SongWriterSplit {

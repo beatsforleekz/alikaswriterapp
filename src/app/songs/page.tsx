@@ -14,6 +14,7 @@ import { logSupabaseError, supabaseUserMessage } from "@/lib/supabaseError";
 
 type SessionRef = { id: string; title: string; date: string };
 type AssetRef = { song_id: string; type: string; url?: string | null };
+type SplitRef = { song_id: string; writer_name: string };
 
 function match(song: SongWork, f: string, assets: AssetRef[]) {
   const songAssets = assets.filter((a) => a.song_id === song.id);
@@ -36,17 +37,19 @@ export default function SongsPage() {
   const [rows, setRows] = useState<SongWork[]>([]);
   const [sessions, setSessions] = useState<SessionRef[]>([]);
   const [assets, setAssets] = useState<AssetRef[]>([]);
+  const [splits, setSplits] = useState<SplitRef[]>([]);
   const [filter, setFilter] = useState("all");
   const [errorMsg, setErrorMsg] = useState("");
 
   const load = async () => {
-    const [songRes, sessionRes, assetRes] = await Promise.all([
+    const [songRes, sessionRes, assetRes, splitRes] = await Promise.all([
       supabase.from("song_works").select("*").order("created_at", { ascending: false }),
       supabase.from("sessions").select("id,title,date"),
       supabase.from("asset_links").select("song_id,type,url"),
+      supabase.from("song_writer_splits").select("song_id,writers(name)"),
     ]);
-    if (songRes.error || sessionRes.error || assetRes.error) {
-      const e = songRes.error || sessionRes.error || assetRes.error;
+    if (songRes.error || sessionRes.error || assetRes.error || splitRes.error) {
+      const e = songRes.error || sessionRes.error || assetRes.error || splitRes.error;
       logSupabaseError("Failed to load songs library", e);
       setErrorMsg(supabaseUserMessage("Could not load songs/works", e));
       return;
@@ -54,6 +57,12 @@ export default function SongsPage() {
     setRows((songRes.data ?? []).map((r) => mapSong(r as Record<string, unknown>)));
     setSessions((sessionRes.data ?? []) as SessionRef[]);
     setAssets((assetRes.data ?? []) as AssetRef[]);
+    setSplits(
+      (splitRes.data ?? []).map((row) => {
+        const r = row as { song_id: string; writers?: { name?: string } | null };
+        return { song_id: String(r.song_id), writer_name: String(r.writers?.name ?? "") };
+      }),
+    );
   };
   useEffect(() => { load(); }, []);
 
@@ -85,12 +94,13 @@ export default function SongsPage() {
         ) : (
           <div className="tableWrap">
             <table>
-              <thead><tr><th>Title</th><th>Status</th><th>Bounce</th><th>Lyrics</th><th>Session</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Title</th><th>Status</th><th>Bounce</th><th>Lyrics</th><th>Writers</th><th>Session</th><th>Actions</th></tr></thead>
               <tbody>
                 {filtered.map((s) => {
                   const songAssets = assets.filter((a) => a.song_id === s.id);
                   const hasBounce = Boolean(s.bounceLink) || songAssets.some((a) => a.type.toLowerCase() === "bounce");
                   const hasLyrics = Boolean(s.lyricsLink) || songAssets.some((a) => a.type.toLowerCase() === "lyrics");
+                  const writerNames = [...new Set(splits.filter((split) => split.song_id === s.id).map((split) => split.writer_name).filter(Boolean))];
                   const parent = sessions.find((x) => x.id === s.sessionId);
                   return (
                     <tr key={s.id}>
@@ -98,6 +108,7 @@ export default function SongsPage() {
                       <td><StatusBadge label={s.status} /></td>
                       <td>{hasBounce ? "Yes" : <span className="helper">Missing</span>}</td>
                       <td>{hasLyrics ? "Yes" : <span className="helper">Missing</span>}</td>
+                      <td>{writerNames.length ? writerNames.join(", ") : <span className="helper">No writers</span>}</td>
                       <td>{parent ? `${parent.date} - ${parent.title || "Untitled Session"}` : <span className="helper">Unlinked</span>}</td>
                       <td><div className="rowActions compact">{parent ? <Link className="button compact" href={`/sessions/${parent.id}`}>Open Session Workspace</Link> : <span className="helper">No session workspace</span>}</div></td>
                     </tr>
