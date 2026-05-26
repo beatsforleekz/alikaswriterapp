@@ -246,8 +246,20 @@ export default function ArchiveProgressPage() {
     };
     patch.archive_reviewed = typeof markReviewed === "boolean" ? markReviewed : true;
 
+    const wasReviewed = Boolean(current.archive_reviewed);
     const ok = await patchSession(current.id, patch);
     if (!ok) return false;
+
+    const nowReviewed = Boolean(patch.archive_reviewed);
+    if (!wasReviewed && nowReviewed) {
+      await supabase.from("session_review_history").insert({
+        session_id: current.id,
+        event_type: "marked_reviewed",
+        field_name: "archive_reviewed",
+        old_value: "false",
+        new_value: "true",
+      });
+    }
 
     if (followUpTask.trim()) {
       const { error: actionErr } = await supabase.from("action_items").insert({
