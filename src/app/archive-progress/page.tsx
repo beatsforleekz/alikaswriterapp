@@ -141,6 +141,7 @@ export default function ArchiveProgressPage() {
   const [splitSongId, setSplitSongId] = useState("");
   const [splitWriterName, setSplitWriterName] = useState("");
   const [splitPct, setSplitPct] = useState("");
+  const [copyFromSongId, setCopyFromSongId] = useState("");
 
   const [errorMsg, setErrorMsg] = useState("");
   const [saveMsg, setSaveMsg] = useState("");
@@ -362,6 +363,83 @@ export default function ArchiveProgressPage() {
     await load();
   };
 
+  const editSplit = async (split: SplitLite) => {
+    const nextWriterName = window.prompt("Writer name", split.writer_name || "");
+    if (nextWriterName === null) return;
+    const cleanWriter = nextWriterName.trim();
+    if (!cleanWriter) return;
+    const nextPct = window.prompt("Split % (leave blank for auto)", split.percentage === null || split.percentage === undefined ? "" : String(split.percentage));
+    if (nextPct === null) return;
+
+    let writerId = writers.find((w) => w.name.toLowerCase() === cleanWriter.toLowerCase())?.id;
+    if (!writerId) {
+      const { data, error } = await supabase.from("writers").insert({ name: cleanWriter }).select("id").single();
+      if (error || !data) {
+        logSupabaseError("Failed to create writer while editing split", error);
+        setErrorMsg(supabaseUserMessage("Could not create writer", error));
+        return;
+      }
+      writerId = String((data as { id: string }).id);
+    }
+
+    const pct = nextPct.trim() ? Number(nextPct) : null;
+    const { error } = await supabase.from("song_writer_splits").update({ writer_id: writerId, percentage: pct }).eq("id", split.id);
+    if (error) {
+      logSupabaseError("Failed to edit writer split in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not update writer/split", error));
+      return;
+    }
+    await load();
+    setSaveMsg("Writer/split updated.");
+    window.setTimeout(() => setSaveMsg(""), 1300);
+  };
+
+  const deleteSplit = async (splitId: string) => {
+    if (!window.confirm("Delete this writer/split row?")) return;
+    const { error } = await supabase.from("song_writer_splits").delete().eq("id", splitId);
+    if (error) {
+      logSupabaseError("Failed to delete writer split in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not delete writer/split", error));
+      return;
+    }
+    await load();
+    setSaveMsg("Writer/split deleted.");
+    window.setTimeout(() => setSaveMsg(""), 1300);
+  };
+
+  const duplicateWritersAcrossSongs = async () => {
+    if (!copyFromSongId || currentSongs.length < 2) return;
+    const sourceSplits = currentSplits.filter((sp) => sp.song_id === copyFromSongId);
+    if (!sourceSplits.length) {
+      setSaveMsg("Source song has no writers/splits to copy.");
+      window.setTimeout(() => setSaveMsg(""), 1400);
+      return;
+    }
+
+    let inserted = 0;
+    for (const targetSong of currentSongs) {
+      if (targetSong.id === copyFromSongId) continue;
+      for (const split of sourceSplits) {
+        const exists = currentSplits.some((sp) => sp.song_id === targetSong.id && sp.writer_id === split.writer_id);
+        if (exists) continue;
+        const { error } = await supabase.from("song_writer_splits").insert({
+          song_id: targetSong.id,
+          writer_id: split.writer_id,
+          percentage: split.percentage ?? null,
+        });
+        if (error) {
+          logSupabaseError("Failed to duplicate writer split across songs", error);
+          setErrorMsg(supabaseUserMessage("Could not duplicate all writers/splits", error));
+          return;
+        }
+        inserted += 1;
+      }
+    }
+    await load();
+    setSaveMsg(inserted > 0 ? "Writers/splits duplicated across songs." : "All songs already had these writers.");
+    window.setTimeout(() => setSaveMsg(""), 1500);
+  };
+
   const updateActionStatus = async (actionId: string, status: string) => {
     const { error } = await supabase.from("action_items").update({ status }).eq("id", actionId);
     if (error) {
@@ -485,8 +563,15 @@ export default function ArchiveProgressPage() {
             </SectionCard>
 
             <SectionCard title="Writers / Splits" actions={<div className="rowActions compact"><select value={splitSongId} onChange={(e) => setSplitSongId(e.target.value)} style={{ minWidth: 180 }}><option value="">Select song</option>{currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}</select><input list="writer-dir-archive" value={splitWriterName} onChange={(e) => setSplitWriterName(e.target.value)} placeholder="Writer name" style={{ minWidth: 180 }} /><input value={splitPct} onChange={(e) => setSplitPct(e.target.value)} placeholder="Split %" style={{ maxWidth: 90 }} /><button className="button primary compact" onClick={addSplit}>Add Writer/Split</button><datalist id="writer-dir-archive">{writers.map((w) => <option key={w.id} value={w.name} />)}</datalist></div>}>
+              <div className="rowActions compact" style={{ marginBottom: ".6rem" }}>
+                <select value={copyFromSongId} onChange={(e) => setCopyFromSongId(e.target.value)} style={{ minWidth: 220 }}>
+                  <option value="">Duplicate writers from song...</option>
+                  {currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}
+                </select>
+                <button className="button compact" onClick={duplicateWritersAcrossSongs} disabled={!copyFromSongId || currentSongs.length < 2}>Duplicate Writers Across Songs</button>
+              </div>
               {currentSplits.length === 0 ? <p className="helper">No writers/splits added yet.</p> : (
-                <div className="tableWrap"><table><thead><tr><th>Song</th><th>Writer</th><th>Split</th></tr></thead><tbody>{currentSplits.map((sp) => <tr key={sp.id}><td>{currentSongs.find((s) => s.id === sp.song_id)?.title || "Untitled"}</td><td>{sp.writer_name}</td><td>{sp.percentage ?? <span className="helper">auto</span>}</td></tr>)}</tbody></table></div>
+                <div className="tableWrap"><table><thead><tr><th>Song</th><th>Writer</th><th>Split</th><th>Actions</th></tr></thead><tbody>{currentSplits.map((sp) => <tr key={sp.id}><td>{currentSongs.find((s) => s.id === sp.song_id)?.title || "Untitled"}</td><td>{sp.writer_name}</td><td>{sp.percentage ?? <span className="helper">auto</span>}</td><td><div className="rowActions compact"><button className="button compact" onClick={() => editSplit(sp)}>Edit</button><button className="button compact" onClick={() => deleteSplit(sp.id)}>Delete</button></div></td></tr>)}</tbody></table></div>
               )}
             </SectionCard>
 
