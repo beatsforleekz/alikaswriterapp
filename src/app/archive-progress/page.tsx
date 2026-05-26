@@ -565,7 +565,6 @@ export default function ArchiveProgressPage() {
               <dt>Title</dt><dd><input value={current.title || ""} onChange={async (e) => { await patchSession(current.id, { title: e.target.value }); await load(); }} /></dd>
               <dt>Location</dt><dd><input value={current.location || ""} onChange={async (e) => { await patchSession(current.id, { location: e.target.value }); await load(); }} /></dd>
               <dt>Archive Reviewed</dt><dd>{current.archive_reviewed ? "Yes" : "No"}</dd>
-              <dt>Apple Note Exists</dt><dd>{currentAssets.some((a) => normalizeEvidenceType(a.type || "") === "apple_note" && Boolean(a.url)) ? "Yes (from evidence links)" : "No"}</dd>
               <dt>Evidence Strength (Auto)</dt><dd><StatusBadge label={evidence.level} /></dd>
               <dt>Review Notes</dt><dd><textarea value={notesDraft[current.id] ?? current.archive_review_notes ?? ""} onChange={(e) => setNotesDraft((p) => ({ ...p, [current.id]: e.target.value }))} placeholder="Add review notes for this session" /></dd>
             </div>
