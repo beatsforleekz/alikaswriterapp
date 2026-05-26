@@ -11,6 +11,7 @@ import SectionCard from "@/components/ui/SectionCard";
 
 type SessionOpt = { id: string; title: string; date: string };
 type WriterRow = { name: string; role: string; pro: string; publisher: string; split: string };
+type TagOption = { id: string; name: string };
 
 export default function NewSongWorkPage() {
   const router = useRouter();
@@ -19,6 +20,9 @@ export default function NewSongWorkPage() {
   const [title, setTitle] = useState("");
   const [status, setStatus] = useState<(typeof SONG_STATUSES)[number]>("Started");
   const [writers, setWriters] = useState<WriterRow[]>([{ name: "", role: "", pro: "", publisher: "", split: "" }]);
+  const [tagOptions, setTagOptions] = useState<TagOption[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const [bounce, setBounce] = useState("");
   const [lyrics, setLyrics] = useState("");
@@ -52,6 +56,8 @@ export default function NewSongWorkPage() {
         return;
       }
       setSessions((data ?? []) as SessionOpt[]);
+      const { data: tagData } = await supabase.from("song_tags").select("id,name").order("name", { ascending: true });
+      setTagOptions((tagData ?? []) as TagOption[]);
     };
     init();
   }, []);
@@ -79,9 +85,16 @@ export default function NewSongWorkPage() {
     setSaving(true);
     setError("");
 
+    const effectiveStatus =
+      bounce.trim() && lyrics.trim() && (status === "Started" || status === "Written" || status === "Bounce In")
+        ? "Assets Filed"
+        : bounce.trim() && !lyrics.trim() && (status === "Started" || status === "Written")
+          ? "Bounce In"
+          : status;
+
     const { data: songRow, error: songErr } = await supabase
       .from("song_works")
-      .insert({ title, session_id: sessionId || null, status, bounce_link: bounce || null, lyrics_link: lyrics || null })
+      .insert({ title, session_id: sessionId || null, status: effectiveStatus, bounce_link: bounce || null, lyrics_link: lyrics || null })
       .select("id")
       .single();
 
@@ -93,6 +106,20 @@ export default function NewSongWorkPage() {
     }
 
     const songId = String(songRow.id);
+
+    for (const tagName of selectedTags) {
+      const clean = tagName.trim();
+      if (!clean) continue;
+      const existing = tagOptions.find((t) => t.name.toLowerCase() === clean.toLowerCase());
+      let tagId = existing?.id;
+      if (!tagId) {
+        const { data: createdTag } = await supabase.from("song_tags").insert({ name: clean }).select("id,name").single();
+        tagId = createdTag?.id as string | undefined;
+      }
+      if (tagId) {
+        await supabase.from("song_work_tags").insert({ song_id: songId, tag_id: tagId });
+      }
+    }
 
     const validWriters = writers.filter((w) => w.name.trim());
     let defaultSplit = 0;
@@ -183,6 +210,7 @@ export default function NewSongWorkPage() {
           <dt>Song/Work Title *</dt><dd><input value={title} onChange={(e)=>setTitle(e.target.value)} placeholder="Title" /></dd>
           <dt>Status</dt><dd><select value={status} onChange={(e)=>setStatus(e.target.value as (typeof SONG_STATUSES)[number])}>{SONG_STATUSES.map((s)=><option key={s} value={s}>{s}</option>)}</select></dd>
           <dt>Linked Session</dt><dd><select value={sessionId} onChange={(e)=>setSessionId(e.target.value)}><option value="">Unlinked</option>{sessions.map((s)=><option key={s.id} value={s.id}>{s.date} - {s.title || "Untitled Session"}</option>)}</select></dd>
+          <dt>Tags</dt><dd><div className="rowActions compact"><input list="song-tag-options-new" value={tagInput} onChange={(e)=>setTagInput(e.target.value)} placeholder="Type tag and add" /><button className="button compact" type="button" onClick={() => { const next = tagInput.trim(); if (!next) return; if (!selectedTags.some((t) => t.toLowerCase() === next.toLowerCase())) setSelectedTags((prev) => [...prev, next]); setTagInput(""); }}>Add Tag</button></div><datalist id="song-tag-options-new">{tagOptions.map((tag) => <option key={tag.id} value={tag.name} />)}</datalist><div className="rowActions compact" style={{ marginTop: ".4rem" }}>{selectedTags.map((tag) => <button key={tag} className="button compact" type="button" onClick={() => setSelectedTags((prev) => prev.filter((t) => t !== tag))}>{tag} ✕</button>)}</div></dd>
         </div>
       </SectionCard>
 

@@ -9,6 +9,7 @@ const links = [
   ["/sessions", "Sessions"],
   ["/songs", "Songs / Works"],
   ["/cuts", "Cuts"],
+  ["/playlists", "Playlists"],
   ["/exports", "Exports"],
   ["/actions", "Actions"],
   ["/help", "Help"],
@@ -16,6 +17,7 @@ const links = [
 
 export default function Nav() {
   const pathname = usePathname();
+  if (pathname.startsWith("/pitch/")) return null;
   return (
     <aside className="sidebar">
       <div className="brandWrap">

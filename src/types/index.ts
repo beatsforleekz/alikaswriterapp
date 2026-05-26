@@ -28,6 +28,8 @@ export interface Session {
   archive_reviewed?: boolean;
   archive_review_notes?: string;
   evidence_strength?: EvidenceStrength;
+  apple_note_exists?: boolean;
+  evidence_strength_override?: boolean;
 }
 
 export interface SongWork {
@@ -36,8 +38,14 @@ export interface SongWork {
   sessionId: string;
   status: SongStatus;
   writerIds: string[];
+  tags?: string[];
   bounceLink?: string;
   lyricsLink?: string;
+  audioStoragePath?: string;
+  audioFileName?: string;
+  audioMimeType?: string;
+  audioUploadedAt?: string;
+  audioSourceNote?: string;
   notes?: string;
 }
 

@@ -12,6 +12,8 @@ export const mapSession = (r: Record<string, unknown>): Session => ({
   archive_reviewed: Boolean(r.archive_reviewed),
   archive_review_notes: r.archive_review_notes ? String(r.archive_review_notes) : undefined,
   evidence_strength: r.evidence_strength ? String(r.evidence_strength) as Session["evidence_strength"] : undefined,
+  apple_note_exists: Boolean(r.apple_note_exists),
+  evidence_strength_override: Boolean(r.evidence_strength_override),
 });
 
 export const mapSong = (r: Record<string, unknown>): SongWork => ({
@@ -20,8 +22,14 @@ export const mapSong = (r: Record<string, unknown>): SongWork => ({
   sessionId: r.session_id ? String(r.session_id) : "",
   status: String(r.status ?? "Started") as SongWork["status"],
   writerIds: [],
+  tags: [],
   bounceLink: r.bounce_link ? String(r.bounce_link) : undefined,
   lyricsLink: r.lyrics_link ? String(r.lyrics_link) : undefined,
+  audioStoragePath: r.audio_storage_path ? String(r.audio_storage_path) : undefined,
+  audioFileName: r.audio_file_name ? String(r.audio_file_name) : undefined,
+  audioMimeType: r.audio_mime_type ? String(r.audio_mime_type) : undefined,
+  audioUploadedAt: r.audio_uploaded_at ? String(r.audio_uploaded_at) : undefined,
+  audioSourceNote: r.audio_source_note ? String(r.audio_source_note) : undefined,
   notes: r.notes ? String(r.notes) : undefined,
 });
 

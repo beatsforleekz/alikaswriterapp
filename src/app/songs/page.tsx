@@ -12,14 +12,22 @@ import { supabase } from "@/lib/supabase";
 import { mapSong } from "@/lib/mappers";
 import { logSupabaseError, supabaseUserMessage } from "@/lib/supabaseError";
 
-type SessionRef = { id: string; title: string; date: string };
+type SessionRef = { id: string; title: string; date: string; evidence_strength?: string | null };
 type AssetRef = { song_id: string; type: string; url?: string | null };
-type SplitRef = { song_id: string; writer_name: string };
+type SplitRef = { song_id: string; writer_name: string; percentage?: number | null };
+type SongTagRef = { song_id: string; tag_name: string };
+
+function normalizeEvidenceType(raw: string) {
+  const t = raw.toLowerCase().trim();
+  if (["lyrics", "lyric", "song lyrics", "song_lyrics"].includes(t)) return "lyrics";
+  if (["bounce", "bounce in", "bounce_in"].includes(t)) return "bounce";
+  return t;
+}
 
 function match(song: SongWork, f: string, assets: AssetRef[]) {
   const songAssets = assets.filter((a) => a.song_id === song.id);
-  const hasBounce = Boolean(song.bounceLink) || songAssets.some((a) => a.type.toLowerCase() === "bounce");
-  const hasLyrics = Boolean(song.lyricsLink) || songAssets.some((a) => a.type.toLowerCase() === "lyrics");
+  const hasBounce = Boolean(song.bounceLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "bounce" && Boolean(a.url));
+  const hasLyrics = Boolean(song.lyricsLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "lyrics" && Boolean(a.url));
   switch (f) {
     case "no-bounce": return !hasBounce;
     case "no-lyrics": return !hasLyrics;
@@ -29,27 +37,44 @@ function match(song: SongWork, f: string, assets: AssetRef[]) {
     case "released": return song.status === "Released";
     case "disputed": return song.status === "Disputed";
     case "complete": return song.status === "Complete";
+    case "audio-ready": return Boolean(song.audioStoragePath);
     default: return true;
   }
 }
+
+const csvSafe = (v: string) => `"${v.replace(/"/g, '""')}"`;
 
 export default function SongsPage() {
   const [rows, setRows] = useState<SongWork[]>([]);
   const [sessions, setSessions] = useState<SessionRef[]>([]);
   const [assets, setAssets] = useState<AssetRef[]>([]);
   const [splits, setSplits] = useState<SplitRef[]>([]);
+  const [songTags, setSongTags] = useState<SongTagRef[]>([]);
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState("all");
   const [errorMsg, setErrorMsg] = useState("");
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const incomingFilter = params.get("filter");
+    if (incomingFilter) setFilter(incomingFilter);
+    const incomingSearch = params.get("search");
+    if (incomingSearch) setSearch(incomingSearch);
+    const incomingTag = params.get("tag");
+    if (incomingTag) setTagFilter(incomingTag);
+  }, []);
+
   const load = async () => {
-    const [songRes, sessionRes, assetRes, splitRes] = await Promise.all([
+    const [songRes, sessionRes, assetRes, splitRes, tagRes] = await Promise.all([
       supabase.from("song_works").select("*").order("created_at", { ascending: false }),
-      supabase.from("sessions").select("id,title,date"),
+      supabase.from("sessions").select("id,title,date,evidence_strength"),
       supabase.from("asset_links").select("song_id,type,url"),
-      supabase.from("song_writer_splits").select("song_id,writers(name)"),
+      supabase.from("song_writer_splits").select("song_id,percentage,writers(name)"),
+      supabase.from("song_work_tags").select("song_id,song_tags(name)"),
     ]);
-    if (songRes.error || sessionRes.error || assetRes.error || splitRes.error) {
-      const e = songRes.error || sessionRes.error || assetRes.error || splitRes.error;
+    if (songRes.error || sessionRes.error || assetRes.error || splitRes.error || tagRes.error) {
+      const e = songRes.error || sessionRes.error || assetRes.error || splitRes.error || tagRes.error;
       logSupabaseError("Failed to load songs library", e);
       setErrorMsg(supabaseUserMessage("Could not load songs/works", e));
       return;
@@ -59,18 +84,73 @@ export default function SongsPage() {
     setAssets((assetRes.data ?? []) as AssetRef[]);
     setSplits(
       (splitRes.data ?? []).map((row) => {
-        const r = row as { song_id: string; writers?: { name?: string } | null };
-        return { song_id: String(r.song_id), writer_name: String(r.writers?.name ?? "") };
+        const r = row as { song_id: string; percentage?: number | null; writers?: { name?: string } | null };
+        return { song_id: String(r.song_id), writer_name: String(r.writers?.name ?? ""), percentage: r.percentage ?? null };
+      }),
+    );
+    setSongTags(
+      (tagRes.data ?? []).map((row) => {
+        const r = row as { song_id: string; song_tags?: { name?: string } | null };
+        return { song_id: String(r.song_id), tag_name: String(r.song_tags?.name ?? "") };
       }),
     );
   };
   useEffect(() => { load(); }, []);
 
-  const filtered = useMemo(() => rows.filter((r) => match(r, filter, assets)), [rows, filter, assets]);
+  const allTags = useMemo(() => [...new Set(songTags.map((t) => t.tag_name).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [songTags]);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (!match(r, filter, assets)) return false;
+      const tagsForSong = songTags.filter((t) => t.song_id === r.id).map((t) => t.tag_name);
+      if (tagFilter !== "all" && !tagsForSong.some((t) => t.toLowerCase() === tagFilter.toLowerCase())) return false;
+      if (!q) return true;
+      const writerNames = [...new Set(splits.filter((split) => split.song_id === r.id).map((split) => split.writer_name).filter(Boolean))];
+      const hay = [r.title, r.status, ...writerNames, ...tagsForSong].join(" ").toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, filter, assets, search, splits, songTags, tagFilter]);
+
+  const exportCsv = () => {
+    const header = ["Title", "Status", "Tags", "Writers", "Splits", "Session Date", "Evidence Strength", "Bounce", "Lyrics", "Audio Ready", "Notes"];
+    const lines = [header.map(csvSafe).join(",")];
+    for (const s of filtered) {
+      const songAssets = assets.filter((a) => a.song_id === s.id);
+      const hasBounce = Boolean(s.bounceLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "bounce" && Boolean(a.url));
+      const hasLyrics = Boolean(s.lyricsLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "lyrics" && Boolean(a.url));
+      const writerRows = splits.filter((split) => split.song_id === s.id).filter((w) => w.writer_name);
+      const writerNames = [...new Set(writerRows.map((w) => w.writer_name))];
+      const splitText = writerRows.map((w) => `${w.writer_name}:${w.percentage ?? "auto"}`).join(" | ");
+      const tagsForSong = songTags.filter((t) => t.song_id === s.id).map((t) => t.tag_name);
+      const parent = sessions.find((x) => x.id === s.sessionId);
+      const row = [
+        s.title || "Untitled Song",
+        s.status || "",
+        tagsForSong.join(", "),
+        writerNames.join(", "),
+        splitText,
+        parent?.date || "",
+        String(parent?.evidence_strength || ""),
+        hasBounce ? "Yes" : "No",
+        hasLyrics ? "Yes" : "No",
+        s.audioStoragePath ? "Yes" : "No",
+        s.notes || "",
+      ];
+      lines.push(row.map((cell) => csvSafe(String(cell))).join(","));
+    }
+    const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `songs_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div>
-      <PageHeader title="Songs / Works" subtitle="Songs are managed from Session workspaces. This page reflects linked catalogue data." actions={<Link className="button" href="/sessions">Go to Sessions Workspace</Link>} />
+      <PageHeader title="Songs / Works" subtitle="Songs are managed from Session workspaces. This page reflects linked catalogue data." actions={<div className="rowActions"><button className="button" onClick={exportCsv}>Export CSV</button><Link className="button" href="/sessions">Go to Sessions Workspace</Link></div>} />
       {errorMsg ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{errorMsg}</p> : null}
 
       <FilterBar>
@@ -85,7 +165,15 @@ export default function SongsPage() {
           <option value="released">Released</option>
           <option value="disputed">Disputed</option>
           <option value="complete">Complete</option>
+          <option value="audio-ready">Audio Ready</option>
         </select>
+        <label>Tag</label>
+        <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} style={{ maxWidth: 220 }}>
+          <option value="all">All Tags</option>
+          {allTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+        </select>
+        <label>Search</label>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title, writer, status, tag" style={{ maxWidth: 280 }} />
       </FilterBar>
 
       <SectionCard>
@@ -94,18 +182,20 @@ export default function SongsPage() {
         ) : (
           <div className="tableWrap">
             <table>
-              <thead><tr><th>Title</th><th>Status</th><th>Bounce</th><th>Lyrics</th><th>Writers</th><th>Session</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Title</th><th>Status</th><th>Tags</th><th>Bounce</th><th>Lyrics</th><th>Writers</th><th>Session</th><th>Actions</th></tr></thead>
               <tbody>
                 {filtered.map((s) => {
                   const songAssets = assets.filter((a) => a.song_id === s.id);
-                  const hasBounce = Boolean(s.bounceLink) || songAssets.some((a) => a.type.toLowerCase() === "bounce");
-                  const hasLyrics = Boolean(s.lyricsLink) || songAssets.some((a) => a.type.toLowerCase() === "lyrics");
+                  const hasBounce = Boolean(s.bounceLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "bounce" && Boolean(a.url));
+                  const hasLyrics = Boolean(s.lyricsLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "lyrics" && Boolean(a.url));
                   const writerNames = [...new Set(splits.filter((split) => split.song_id === s.id).map((split) => split.writer_name).filter(Boolean))];
+                  const tagsForSong = songTags.filter((t) => t.song_id === s.id).map((t) => t.tag_name);
                   const parent = sessions.find((x) => x.id === s.sessionId);
                   return (
                     <tr key={s.id}>
                       <td><Link href={`/songs/${s.id}`}>{s.title || "Untitled Song"}</Link></td>
                       <td><StatusBadge label={s.status} /></td>
+                      <td>{tagsForSong.length ? tagsForSong.join(", ") : <span className="helper">No tags</span>}</td>
                       <td>{hasBounce ? "Yes" : <span className="helper">Missing</span>}</td>
                       <td>{hasLyrics ? "Yes" : <span className="helper">Missing</span>}</td>
                       <td>{writerNames.length ? writerNames.join(", ") : <span className="helper">No writers</span>}</td>

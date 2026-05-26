@@ -73,7 +73,7 @@ textarea { min-height: 92px; }
 
 .statCard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: .95rem; box-shadow: var(--shadow); }
 .statLabel { color: var(--muted); font-size: .84rem; margin-bottom: .32rem; }
-.statValue { font-size: 1.45rem; font-weight: 600; font-family: "Iowan Old Style", serif; }
+.statValue { font-size: 1.45rem; font-weight: 600; font-family: "Avenir Next", "Segoe UI", Arial, sans-serif; }
 
 .filterBar { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .7rem; display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: .8rem; }
 
@@ -116,4 +116,463 @@ tr:hover td { background: #f8f2ec; }
   .mainArea { padding: 1rem; }
   .kv { grid-template-columns: 1fr; }
   .rowActions.compact { flex-wrap: wrap; }
+}
+
+.pitchPage {
+  min-height: 100vh;
+  background: linear-gradient(180deg, #f8f3ed 0%, #efe5dc 100%);
+  color: var(--text);
+  padding: 1.6rem 1.1rem 7.5rem;
+}
+.pitchWrap { max-width: 1240px; margin: 0 auto; }
+.pitchHeader {
+  background: linear-gradient(140deg, #fff8f2 0%, #f5ebe1 65%, #efe2d5 100%);
+  border: 1px solid #e4d6c8;
+  border-radius: 18px;
+  box-shadow: 0 14px 34px rgba(59, 44, 35, 0.1);
+  padding: 1.2rem;
+  margin-bottom: 1rem;
+}
+.pitchLockedCard {
+  background: #fff8f2;
+  border: 1px solid #e4d6c8;
+  border-radius: 16px;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+.pitchEyebrow { color: #8d6e50; text-transform: uppercase; letter-spacing: .08em; font-size: .75rem; margin-bottom: .45rem; }
+.pitchTitle { font-size: clamp(1.5rem, 3.2vw, 2.35rem); line-height: 1.1; color: #2d1f17; }
+.pitchDescription { color: #5d4a3d; margin-top: .6rem; max-width: 75ch; }
+.pitchMeta { display: flex; gap: .55rem; flex-wrap: wrap; margin-top: .75rem; }
+.pitchMeta span { background: #f3e8dd; border: 1px solid #decfc0; border-radius: 999px; padding: .25rem .55rem; font-size: .78rem; color: #6d5848; }
+.pitchLockRow { display: flex; gap: .55rem; margin-top: .9rem; }
+
+.pitchTracklist {
+  display: grid;
+  gap: .55rem;
+  background: #f7efe6;
+  border: 1px solid #e3d7cb;
+  border-radius: 16px;
+  padding: .75rem .85rem;
+}
+.pitchTrack {
+  display: grid;
+  grid-template-columns: 34px 72px 1fr 120px;
+  gap: .6rem;
+  align-items: center;
+  border: 1px solid #e4d7cb;
+  background: #fff9f4;
+  border-radius: 14px;
+  padding: .75rem .85rem;
+  transition: background .15s ease, border-color .15s ease, transform .15s ease;
+}
+.pitchTrack:hover { background: #fff6ef; border-color: #d6c1aa; transform: translateY(-1px); }
+.pitchTrack.active { border-color: #b79052; background: #fff3e8; box-shadow: 0 8px 18px rgba(59, 44, 35, 0.08); }
+.pitchTrackNo { font-weight: 600; color: #8a7463; text-align: center; }
+.pitchPlayBtn {
+  border: 1px solid #d9c7b5;
+  background: #f9efe4;
+  color: #3a2b22;
+  border-radius: 999px;
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  line-height: 1;
+}
+.pitchPlayBtn:disabled { opacity: .52; cursor: not-allowed; }
+.pitchTrackMain { min-width: 0; }
+.pitchTrackTitleRow { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.pitchTrackTitle { font-size: 1rem; color: #2f221b; }
+.pitchTrackNotes { color: #6e5949; margin-top: .2rem; font-size: .9rem; }
+.pitchNowPlaying {
+  background: #efe0cb;
+  color: #6d4d2e;
+  border: 1px solid #d6be9b;
+  border-radius: 999px;
+  padding: .1rem .45rem;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.pitchTrackTime { color: #7f6b5b; font-size: .8rem; min-width: 90px; text-align: right; }
+
+.pitchMiniPlayer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  background: rgba(37, 26, 20, 0.94);
+  border-top: 1px solid rgba(255, 239, 225, 0.18);
+  backdrop-filter: blur(8px);
+  color: #f7e7d8;
+  padding: .65rem .85rem .85rem;
+}
+.pitchMiniMain {
+  max-width: 1240px;
+  margin: 0 auto;
+  display: flex;
+  justify-content: space-between;
+  gap: .8rem;
+  align-items: center;
+}
+.pitchMiniTrack {
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pitchMiniControls { display: flex; gap: .4rem; }
+.pitchMiniControls .button { border-color: rgba(255, 239, 225, 0.25); background: rgba(255, 248, 239, 0.1); color: #f8ecde; min-width: 44px; min-height: 44px; }
+.pitchMiniControls .button.primary { background: #b79052; color: #24170f; border-color: #9e7b43; }
+
+.pitchProgressWrap {
+  max-width: 1240px;
+  margin: .55rem auto 0;
+}
+.pitchProgressWrap input[type="range"] { padding: 0; height: 28px; }
+.pitchProgressTime {
+  display: flex;
+  justify-content: space-between;
+  color: #d9c7b7;
+  font-size: .78rem;
+  margin-top: .1rem;
+}
+
+@media (max-width: 760px) {
+  .pitchLockRow { flex-direction: column; }
+  .pitchTrack { grid-template-columns: 24px 68px 1fr; }
+  .pitchTrackTime { grid-column: 3; text-align: left; min-width: 0; }
+  .pitchMiniMain { flex-direction: column; align-items: stretch; }
+  .pitchMiniTrack { white-space: normal; }
+  .pitchMiniControls { justify-content: space-between; }
+  .pitchMiniControls .button { flex: 1; min-height: 42px; }
+}
+
+.pitchHero {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.05rem;
+  align-items: stretch;
+}
+.pitchHeroArt {
+  border-radius: 14px;
+  border: 1px solid #dbc9b8;
+  background: linear-gradient(140deg, #4b362a 0%, #7e5a3f 55%, #b18d68 100%);
+  min-height: 230px;
+  position: relative;
+  overflow: hidden;
+}
+.pitchHeroArtInner {
+  position: absolute;
+  inset: 10%;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 239, 224, 0.35);
+  background: radial-gradient(circle at 20% 20%, rgba(255, 248, 238, 0.55) 0%, rgba(255, 248, 238, 0.08) 42%, rgba(255, 248, 238, 0) 70%);
+}
+.pitchHeroMain { display: flex; flex-direction: column; justify-content: center; }
+.pitchPlayHeroBtn { min-height: 48px; padding: .7rem 1.15rem; border-radius: 12px; font-size: .98rem; }
+
+.pitchTrack {
+  grid-template-columns: 34px 72px 1fr 270px;
+  align-items: start;
+}
+.pitchTrackMain { padding-top: .2rem; }
+.pitchTrackTitle { font-size: 1.06rem; }
+.pitchTrackNotes { line-height: 1.35; }
+.pitchTrackAside { display: grid; gap: .5rem; justify-items: end; }
+.pitchFeedbackRow { display: flex; flex-wrap: wrap; gap: .35rem; justify-content: flex-end; }
+.pitchPill {
+  border: 1px solid #d4c2b0;
+  background: #f8eee3;
+  color: #5f493b;
+  border-radius: 999px;
+  padding: .24rem .58rem;
+  font-size: .74rem;
+  line-height: 1.2;
+}
+.pitchPill.active {
+  background: #e7d2ba;
+  border-color: #b99263;
+  color: #4a331f;
+}
+.pitchHoldBadge {
+  border: 1px solid #c9ab7f;
+  color: #6f4c20;
+  background: #f2e3cc;
+  border-radius: 999px;
+  padding: .1rem .45rem;
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+.pitchTrack.onHold { border-color: #c9ab7f; }
+
+.pitchMiniPlayer { padding: .52rem .85rem .62rem; }
+.pitchProgressWrap input[type="range"] { height: 22px; }
+
+@media (max-width: 980px) {
+  .pitchHero {
+    grid-template-columns: 1fr;
+  }
+  .pitchHeroArt {
+    min-height: 170px;
+  }
+  .pitchTrack {
+    grid-template-columns: 24px 62px 1fr;
+  }
+  .pitchTrackAside {
+    grid-column: 3;
+    justify-items: start;
+    gap: .35rem;
+  }
+  .pitchFeedbackRow { justify-content: flex-start; }
+}
+
+
+/* Public pitch layout refinement: wide track rows, no overlap, no hero placeholder image */
+.pitchWrap { max-width: 1460px; }
+.pitchHeader.pitchHero { padding: 1.35rem 1.45rem; }
+.pitchHero { display: block; }
+.pitchHeroMain { display: grid; gap: .55rem; }
+.pitchTitle { font-size: clamp(2rem, 4.1vw, 3.1rem); }
+.pitchMeta { margin-top: .5rem; }
+.pitchPlayHeroBtn { min-height: 50px; padding: .72rem 1.22rem; }
+.pitchTracklist { padding: .85rem; gap: .65rem; }
+.pitchTrack {
+  grid-template-columns: 36px 56px minmax(0,1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: .8rem;
+  row-gap: .55rem;
+  align-items: center;
+  width: 100%;
+}
+.pitchTrackNo { grid-column: 1; grid-row: 1; }
+.pitchPlayBtn { grid-column: 2; grid-row: 1; width: 46px; height: 46px; }
+.pitchTrackMain { grid-column: 3; grid-row: 1; min-width: 0; }
+.pitchTrackAside { grid-column: 4; grid-row: 1; justify-self: end; }
+.pitchFeedbackRow {
+  grid-column: 3 / 5;
+  grid-row: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  justify-content: flex-start;
+}
+.pitchPill { white-space: nowrap; }
+.pitchTrackTitle { font-size: 1.08rem; line-height: 1.25; }
+.pitchTrackNotes { margin-top: .22rem; max-width: 100%; }
+
+@media (max-width: 980px) {
+  .pitchWrap { max-width: 100%; }
+  .pitchHeader.pitchHero { padding: 1.05rem; }
+  .pitchTrack {
+    grid-template-columns: 26px 52px minmax(0,1fr);
+    grid-template-rows: auto auto auto;
+  }
+  .pitchTrackAside {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: start;
+  }
+  .pitchFeedbackRow {
+    grid-column: 1 / -1;
+    grid-row: 3;
+  }
+}
+
+/* Public pitch alignment + enquiry modal refinements */
+.pitchPage {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+.pitchCentered {
+  width: 100%;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+.pitchHeroClean {
+  background: linear-gradient(145deg, #fff9f2 0%, #f4e9dd 55%, #eee0d2 100%);
+  padding: 1.75rem 1.9rem;
+  border-radius: 20px;
+}
+.pitchHeroClean .pitchTitle {
+  font-size: clamp(2rem, 4vw, 3rem);
+}
+.pitchHeroClean .pitchMeta { margin-top: .9rem; }
+.pitchPlayHeroBtn { min-height: 56px; padding: .82rem 1.35rem; font-size: 1.02rem; }
+.pitchTracklistWide {
+  width: 100%;
+}
+.pitchTrackRow {
+  width: 100%;
+  grid-template-columns: 34px 58px minmax(0, 1fr) auto;
+  grid-template-rows: auto;
+  row-gap: .3rem;
+  min-height: 86px;
+  padding-top: .62rem;
+  padding-bottom: .62rem;
+}
+.pitchTrackRow .pitchTrackNo {
+  grid-column: 1;
+  grid-row: 1;
+}
+.pitchTrackRow .pitchPlayBtn {
+  grid-column: 2;
+  grid-row: 1;
+}
+.pitchTrackRow .pitchTrackMain {
+  grid-column: 3;
+  grid-row: 1;
+}
+.pitchTrackRow .pitchTrackAside {
+  grid-column: 4;
+  grid-row: 1;
+  align-self: center;
+}
+.pitchFeedbackRowInline {
+  grid-column: 4;
+  grid-row: 1;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: nowrap;
+}
+.pitchPill {
+  font-size: .69rem;
+  padding: .2rem .5rem;
+  letter-spacing: .01em;
+}
+.pitchModalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(36, 25, 19, 0.35);
+  display: grid;
+  place-items: center;
+  z-index: 70;
+  padding: 1rem;
+}
+.pitchModalCard {
+  width: min(640px, 96vw);
+  background: #fff8f2;
+  border: 1px solid #dcc8b5;
+  border-radius: 14px;
+  box-shadow: 0 16px 38px rgba(59, 44, 35, 0.2);
+  padding: 1rem;
+}
+.pitchModalGrid {
+  display: grid;
+  gap: .55rem;
+}
+.pitchModalGrid textarea {
+  min-height: 110px;
+}
+
+@media (max-width: 980px) {
+  .pitchCentered {
+    max-width: 100%;
+  }
+  .pitchHeroClean { padding: 1.2rem 1rem; }
+  .pitchTrackRow {
+    grid-template-columns: 26px 52px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: .35rem;
+  }
+  .pitchTrackRow .pitchTrackAside {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: start;
+  }
+  .pitchFeedbackRowInline {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+/* Final public pitch layout override */
+.appShell:has(.pitchPage) {
+  grid-template-columns: 1fr;
+}
+
+.appShell:has(.pitchPage) .sidebar {
+  display: none;
+}
+
+.appShell:has(.pitchPage) .mainArea {
+  padding: 0;
+}
+
+.appShell:has(.pitchPage) .contentWrap {
+  max-width: none;
+  margin: 0;
+}
+
+.pitchPage {
+  min-height: 100vh;
+  width: 100%;
+  display: block;
+  padding: 48px;
+}
+
+.pitchPage .pitchCentered,
+.pitchPage .pitchWrap {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.pitchPage .pitchHeader,
+.pitchPage .pitchHeroClean,
+.pitchPage .pitchTracklist,
+.pitchPage .pitchTracklistWide {
+  width: 100%;
+}
+
+.pitchPage .pitchTrack,
+.pitchPage .pitchTrackRow {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 36px 56px minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.pitchPage .pitchFeedbackRowInline {
+  grid-column: 4;
+  grid-row: 1;
+  justify-content: flex-end;
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 768px) {
+  .pitchPage {
+    padding: 20px;
+  }
+
+  .pitchPage .pitchTrack,
+  .pitchPage .pitchTrackRow {
+    grid-template-columns: 28px 50px minmax(0, 1fr);
+    grid-template-rows: auto auto;
+    row-gap: 0.4rem;
+  }
+
+  .pitchPage .pitchTrackAside {
+    grid-column: 3;
+    grid-row: 2;
+    justify-self: start;
+  }
+
+  .pitchPage .pitchFeedbackRowInline {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
 }

@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import { hasBounce, hasLyrics } from "@/lib/selectors";
+import { useEffect, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
 import StatCard from "@/components/ui/StatCard";
@@ -10,24 +9,32 @@ import EmptyState from "@/components/ui/EmptyState";
 import { supabase } from "@/lib/supabase";
 import { mapAction, mapSession, mapSong } from "@/lib/mappers";
 import { ActionItem, Session, SongWork } from "@/types";
+type AssetRef = { song_id: string; type: string; url?: string | null };
+type ReviewEventRef = { created_at: string; event_type: string; session_id: string };
 
 export default function Page() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [songs, setSongs] = useState<SongWork[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([]);
+  const [assets, setAssets] = useState<AssetRef[]>([]);
+  const [reviewEvents, setReviewEvents] = useState<ReviewEventRef[]>([]);
   const [skip, setSkip] = useState(false);
 
   useEffect(() => {
     setSkip(new URLSearchParams(window.location.search).get("skip") === "1");
     const load = async () => {
-      const [sRes, soRes, aRes] = await Promise.all([
+      const [sRes, soRes, aRes, assetRes, reviewRes] = await Promise.all([
         supabase.from("sessions").select("*").order("date", { ascending: false }),
         supabase.from("song_works").select("*").order("created_at", { ascending: false }),
         supabase.from("action_items").select("*").order("due_date", { ascending: true }),
+        supabase.from("asset_links").select("song_id,type,url"),
+        supabase.from("session_review_history").select("created_at,event_type,session_id").eq("event_type", "marked_reviewed").order("created_at", { ascending: false }),
       ]);
       setSessions((sRes.data ?? []).map((r) => mapSession(r as Record<string, unknown>)));
       setSongs((soRes.data ?? []).map((r) => mapSong(r as Record<string, unknown>)));
       setActions((aRes.data ?? []).map((r) => mapAction(r as Record<string, unknown>)));
+      setAssets((assetRes.data ?? []) as AssetRef[]);
+      setReviewEvents((reviewRes.data ?? []) as ReviewEventRef[]);
     };
     load();
   }, []);
@@ -53,14 +60,35 @@ export default function Page() {
     );
   }
 
-  const missingBounce = songs.filter((s) => !hasBounce(s)).length;
-  const missingLyrics = songs.filter((s) => !hasLyrics(s)).length;
+  const hasBounceForSong = (songId: string, bounceLink?: string) =>
+    Boolean(bounceLink) || assets.some((a) => a.song_id === songId && String(a.type || "").toLowerCase() === "bounce" && Boolean(a.url));
+  const hasLyricsForSong = (songId: string, lyricsLink?: string) =>
+    Boolean(lyricsLink) || assets.some((a) => a.song_id === songId && String(a.type || "").toLowerCase() === "lyrics" && Boolean(a.url));
+
+  const missingBounce = songs.filter((s) => !hasBounceForSong(s.id, s.bounceLink)).length;
+  const missingLyrics = songs.filter((s) => !hasLyricsForSong(s.id, s.lyricsLink)).length;
   const cutReleased = songs.filter((s) => s.status === "Cut" || s.status === "Released").length;
   const disputed = songs.filter((s) => s.status === "Disputed").length;
+  const sessionsWithNoSongs = sessions.filter((se) => songs.every((song) => song.sessionId !== se.id)).length;
+  const sessionsWithNoBounce = sessions.filter((se) => {
+    const sessionSongs = songs.filter((song) => song.sessionId === se.id);
+    if (sessionSongs.length === 0) return true;
+    return sessionSongs.every((song) => !hasBounceForSong(song.id, song.bounceLink));
+  }).length;
   const upcoming = [...actions].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const currentYear = new Date().getFullYear();
   const yearSessions = sessions.filter((s) => s.date.startsWith(String(currentYear)));
-  const latestAudited = yearSessions.filter((s) => s.archive_reviewed).map((s) => s.date).sort().at(-1);
+  const yearSessionIds = new Set(yearSessions.map((s) => s.id));
+  const latestReviewEvent = reviewEvents.find((e) => yearSessionIds.has(e.session_id));
+  const latestAudited = latestReviewEvent
+    ? new Date(latestReviewEvent.created_at).toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "";
   const sessionsNeedingEvidence = yearSessions.filter((s) => !s.evidence_strength || s.evidence_strength === "Weak" || s.evidence_strength === "Partial").length;
 
   return (
@@ -69,11 +97,14 @@ export default function Page() {
       <div className="grid cards">
         <StatCard label="Total Sessions" value={sessions.length} />
         <StatCard label="Total Songs / Works" value={songs.length} />
-        <StatCard label="Missing Bounce" value={missingBounce} />
-        <StatCard label="Missing Lyrics" value={missingLyrics} />
+        <StatCard label="Sessions with 0 Songs" value={sessionsWithNoSongs} />
+        <StatCard label="Sessions with 0 Bounce" value={sessionsWithNoBounce} />
+        <StatCard label="Songs Missing Bounce" value={missingBounce} />
+        <StatCard label="Songs Missing Lyrics" value={missingLyrics} />
         <StatCard label="Cut / Released" value={cutReleased} />
         <StatCard label="Disputed" value={disputed} />
       </div>
+      <div className="section">
       <SectionCard title="Archive Progress" actions={<Link className="button primary" href="/archive-progress">Quick Resume</Link>}>
         <div className="grid cards">
           <StatCard label="Current Active Year" value={currentYear} />
@@ -81,12 +112,17 @@ export default function Page() {
           <StatCard label="Sessions Needing Evidence" value={sessionsNeedingEvidence} />
         </div>
       </SectionCard>
+      </div>
+      <div className="section">
       <SectionCard title="Quick Links"><div className="rowActions"><Link className="button" href="/songs?filter=no-bounce">No Bounce</Link><Link className="button" href="/songs?filter=no-lyrics">No Lyrics</Link><Link className="button" href="/songs?filter=disputed">Disputed</Link><Link className="button" href="/exports">Exports</Link></div></SectionCard>
+      </div>
+      <div className="section">
       <SectionCard title="Upcoming Follow-ups">
         {upcoming.length === 0 ? <EmptyState title="No follow-ups yet" hint="Add action items to track next steps." /> : (
           <div className="tableWrap"><table><thead><tr><th>Due Date</th><th>Priority</th><th>Task</th><th>Status</th></tr></thead><tbody>{upcoming.map((a)=><tr key={a.id}><td>{a.dueDate}</td><td>{a.priority}</td><td>{a.task}</td><td>{a.status}</td></tr>)}</tbody></table></div>
         )}
       </SectionCard>
+      </div>
     </div>
   );
 }

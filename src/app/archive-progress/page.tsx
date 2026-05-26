@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
@@ -19,6 +19,8 @@ export default function ArchiveProgressPage() {
   const [sessions, setSessions] = useState<SessionLite[]>([]);
   const [songs, setSongs] = useState<SongLite[]>([]);
   const [errorMsg, setErrorMsg] = useState("");
+  const progressSectionRef = useRef<HTMLDivElement | null>(null);
+  const reviewedUpToInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -97,7 +99,7 @@ export default function ArchiveProgressPage() {
           const completion = soRows.length ? Math.round((completeEvidence / soRows.length) * 100) : 0;
           const p = progress.find((x) => x.year === year) || { id: "", year, archiveReviewedUpTo: "", lastAuditedSessionDate: "", notes: "" };
           return (
-            <SectionCard key={year} actions={<button className="button" onClick={() => setActiveYear(year)}>Edit Progress</button>}>
+            <SectionCard key={year} actions={<button className="button" onClick={() => { setActiveYear(year); window.setTimeout(() => { progressSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); reviewedUpToInputRef.current?.focus(); }, 30); }}>Edit Progress</button>}>
               <div className="rowActions" style={{ justifyContent: "space-between" }}><h2>{year}</h2>{year === activeYear ? <StatusBadge label="Started" /> : null}</div>
               <p className="helper">Last audited: {p.lastAuditedSessionDate || "Not set"}</p>
               <div style={{ marginTop: ".5rem" }}>Total sessions: {sRows.length}</div>
@@ -110,14 +112,16 @@ export default function ArchiveProgressPage() {
           );
         })}
       </div>
+      <div ref={progressSectionRef}>
       <SectionCard title={`Manual Progress Tracking (${activeYear})`}>
         <div className="kv">
-          <dt>Archive reviewed up to</dt><dd><input type="date" value={progress.find((r)=>r.year===activeYear)?.archiveReviewedUpTo || ""} onChange={(e)=>upsertYear(activeYear, "archiveReviewedUpTo", e.target.value)} placeholder="YYYY-MM-DD" /></dd>
+          <dt>Archive reviewed up to</dt><dd><input ref={reviewedUpToInputRef} type="date" value={progress.find((r)=>r.year===activeYear)?.archiveReviewedUpTo || ""} onChange={(e)=>upsertYear(activeYear, "archiveReviewedUpTo", e.target.value)} placeholder="YYYY-MM-DD" /></dd>
           <dt>Last audited session date</dt><dd><input type="date" value={progress.find((r)=>r.year===activeYear)?.lastAuditedSessionDate || ""} onChange={(e)=>upsertYear(activeYear, "lastAuditedSessionDate", e.target.value)} placeholder="YYYY-MM-DD" /></dd>
           <dt>Notes for this year</dt><dd><textarea value={progress.find((r)=>r.year===activeYear)?.notes || ""} onChange={(e)=>upsertYear(activeYear, "notes", e.target.value)} placeholder="Backfill notes" /></dd>
         </div>
         <div className="rowActions" style={{ marginTop: ".8rem" }}><Link className="button primary" href="/sessions">Quick Resume</Link></div>
       </SectionCard>
+      </div>
     </div>
   );
 }
