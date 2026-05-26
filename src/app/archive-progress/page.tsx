@@ -143,6 +143,7 @@ export default function ArchiveProgressPage() {
   const [splitWriterName, setSplitWriterName] = useState("");
   const [splitPct, setSplitPct] = useState("");
   const [copyFromSongId, setCopyFromSongId] = useState("");
+  const [copyTargetSongIds, setCopyTargetSongIds] = useState<string[]>([]);
 
   const [errorMsg, setErrorMsg] = useState("");
   const [saveMsg, setSaveMsg] = useState("");
@@ -179,10 +180,13 @@ export default function ArchiveProgressPage() {
     load();
   }, []);
 
-  const filteredSessions = useMemo(() => sessions
+  const periodSessions = useMemo(() => sessions
     .filter((s) => s.date?.startsWith(String(year)))
     .filter((s) => !startDate || s.date >= startDate)
     .filter((s) => !endDate || s.date <= endDate)
+    .sort((a, b) => a.date.localeCompare(b.date)), [sessions, year, startDate, endDate]);
+
+  const filteredSessions = useMemo(() => periodSessions
     .filter((s) => {
       if (filter !== "not-reviewed") return true;
       if (!s.archive_reviewed) return true;
@@ -190,7 +194,7 @@ export default function ArchiveProgressPage() {
       const openStatuses = new Set(["open", "in progress", "pending", "todo"]);
       return sessionActions.some((a) => openStatuses.has(String(a.status || "").toLowerCase().trim()));
     })
-    .sort((a, b) => a.date.localeCompare(b.date)), [sessions, actions, year, startDate, endDate, filter]);
+    .sort((a, b) => a.date.localeCompare(b.date)), [periodSessions, actions, filter]);
 
   const current = filteredSessions[cursor] ?? null;
   const currentSongs = useMemo(() => songs.filter((s) => String(s.session_id || "") === String(current?.id || "")), [songs, current?.id]);
@@ -208,8 +212,8 @@ export default function ArchiveProgressPage() {
     setSongDrafts(next);
   }, [currentSongs]);
 
-  const reviewedCount = useMemo(() => filteredSessions.filter((s) => s.archive_reviewed).length, [filteredSessions]);
-  const remainingCount = Math.max(filteredSessions.length - reviewedCount, 0);
+  const reviewedCount = useMemo(() => periodSessions.filter((s) => s.archive_reviewed).length, [periodSessions]);
+  const remainingCount = Math.max(periodSessions.length - reviewedCount, 0);
   const progressPct = filteredSessions.length ? Math.round(((cursor + 1) / filteredSessions.length) * 100) : 0;
 
   const startReview = () => {
@@ -466,6 +470,11 @@ export default function ArchiveProgressPage() {
 
   const duplicateWritersAcrossSongs = async () => {
     if (!copyFromSongId || currentSongs.length < 2) return;
+    if (!copyTargetSongIds.length) {
+      setSaveMsg("Select at least one target song.");
+      window.setTimeout(() => setSaveMsg(""), 1400);
+      return;
+    }
     const sourceSplits = currentSplits.filter((sp) => sp.song_id === copyFromSongId);
     if (!sourceSplits.length) {
       setSaveMsg("Source song has no writers/splits to copy.");
@@ -476,6 +485,7 @@ export default function ArchiveProgressPage() {
     let inserted = 0;
     for (const targetSong of currentSongs) {
       if (targetSong.id === copyFromSongId) continue;
+      if (!copyTargetSongIds.includes(targetSong.id)) continue;
       for (const split of sourceSplits) {
         const exists = currentSplits.some((sp) => sp.song_id === targetSong.id && sp.writer_id === split.writer_id);
         if (exists) continue;
@@ -493,6 +503,7 @@ export default function ArchiveProgressPage() {
       }
     }
     await load();
+    setCopyTargetSongIds([]);
     setSaveMsg(inserted > 0 ? "Writers/splits duplicated across songs." : "All songs already had these writers.");
     window.setTimeout(() => setSaveMsg(""), 1500);
   };
@@ -531,13 +542,13 @@ export default function ArchiveProgressPage() {
   };
 
   const completionStats = useMemo(() => {
-    const sessionIds = new Set(filteredSessions.map((s) => s.id));
+    const sessionIds = new Set(periodSessions.map((s) => s.id));
     const scopedSongs = songs.filter((s) => sessionIds.has(String(s.session_id || "")));
     const scopedAssets = assets.filter((a) => scopedSongs.some((s) => s.id === a.song_id));
     const scopedSplits = splits.filter((sp) => scopedSongs.some((s) => s.id === sp.song_id));
     const missingBounce = scopedSongs.filter((song) => !(Boolean(song.bounce_link) || scopedAssets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "bounce" && Boolean(a.url)))).length;
     const missingLyrics = scopedSongs.filter((song) => !(Boolean(song.lyrics_link) || scopedAssets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "lyrics" && Boolean(a.url)))).length;
-    const weakPartial = filteredSessions.filter((s) => {
+    const weakPartial = periodSessions.filter((s) => {
       const ss = songs.filter((x) => String(x.session_id || "") === s.id);
       const sids = new Set(ss.map((x) => x.id));
       const sa = assets.filter((a) => sids.has(a.song_id));
@@ -548,7 +559,7 @@ export default function ArchiveProgressPage() {
     }).length;
     const followUps = actions.filter((a) => sessionIds.has(String(a.session_id || ""))).length;
     return { missingBounce, missingLyrics, weakPartial, followUps, scopedSplits: scopedSplits.length };
-  }, [filteredSessions, songs, assets, splits, actions]);
+  }, [periodSessions, songs, assets, splits, actions]);
 
   return (
     <div>
@@ -564,7 +575,7 @@ export default function ArchiveProgressPage() {
         </div>
         <div className="rowActions" style={{ marginTop: ".75rem" }}>
           <button className="button primary" onClick={startReview}>Start Review</button>
-          <span className="helper">{filteredSessions.length} sessions in selected period</span>
+          <span className="helper">{periodSessions.length} sessions in selected period</span>
         </div>
       </SectionCard>
 
@@ -647,7 +658,28 @@ export default function ArchiveProgressPage() {
                   <option value="">Duplicate writers from song...</option>
                   {currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}
                 </select>
-                <button className="button compact" onClick={duplicateWritersAcrossSongs} disabled={!copyFromSongId || currentSongs.length < 2}>Duplicate Writers Across Songs</button>
+                <button className="button compact" onClick={duplicateWritersAcrossSongs} disabled={!copyFromSongId || currentSongs.length < 2 || !copyTargetSongIds.length}>Duplicate to Selected Songs</button>
+              </div>
+              {copyFromSongId ? (
+                <div className="rowActions compact" style={{ marginBottom: ".6rem", flexWrap: "wrap" }}>
+                  {currentSongs.filter((s) => s.id !== copyFromSongId).map((s) => (
+                    <label key={s.id} className="statusBadge" style={{ cursor: "pointer" }}>
+                      <input
+                        type="checkbox"
+                        checked={copyTargetSongIds.includes(s.id)}
+                        onChange={(e) => {
+                          setCopyTargetSongIds((prev) => e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id));
+                        }}
+                        style={{ marginRight: ".35rem" }}
+                      />
+                      {s.title || "Untitled"}
+                    </label>
+                  ))}
+                </div>
+              ) : null}
+              <div className="rowActions compact" style={{ marginBottom: ".6rem" }}>
+                <button className="button compact" onClick={() => setCopyTargetSongIds(currentSongs.filter((s) => s.id !== copyFromSongId).map((s) => s.id))} disabled={!copyFromSongId}>Select All Targets</button>
+                <button className="button compact" onClick={() => setCopyTargetSongIds([])} disabled={!copyTargetSongIds.length}>Clear Targets</button>
               </div>
               {currentSplits.length === 0 ? <p className="helper">No writers/splits added yet.</p> : (
                 <div className="tableWrap"><table><thead><tr><th>Song</th><th>Writer</th><th>Split</th><th>Actions</th></tr></thead><tbody>{currentSplits.map((sp) => <tr key={sp.id}><td>{currentSongs.find((s) => s.id === sp.song_id)?.title || "Untitled"}</td><td>{sp.writer_name}</td><td>{sp.percentage ?? <span className="helper">auto</span>}</td><td><div className="rowActions compact"><button className="button compact" onClick={() => editSplit(sp)}>Edit</button><button className="button compact" onClick={() => deleteSplit(sp.id)}>Delete</button></div></td></tr>)}</tbody></table></div>
@@ -673,7 +705,7 @@ export default function ArchiveProgressPage() {
               <button className="button" onClick={() => { back(); scrollReviewTop(); }} disabled={cursor === 0}>Back</button>
               <button className="button" onClick={() => { next(); scrollReviewTop(); }} disabled={cursor >= filteredSessions.length - 1}>Next</button>
               <button className="button primary" onClick={markReviewedAndNext}>Mark Reviewed & Next</button>
-              <button className="button" onClick={async () => { const ok = await saveCurrent(); if (ok) scrollReviewTop(); }}>Save Progress</button>
+              <button className="button" onClick={() => saveCurrent()}>Save Progress</button>
               {saveMsg ? <span className="helper">{saveMsg}</span> : null}
             </div>
             <p className="helper" style={{ marginTop: ".55rem" }}>Archive Reviewed means this session has been intentionally reviewed and outstanding items acknowledged, not necessarily fully complete.</p>
