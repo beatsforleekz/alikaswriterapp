@@ -9,7 +9,10 @@ import EmptyState from "@/components/ui/EmptyState";
 import { supabase } from "@/lib/supabase";
 import { mapAction, mapSession, mapSong } from "@/lib/mappers";
 import { ActionItem, Session, SongWork } from "@/types";
+import ReadinessPipeline, { ReadinessItem } from "@/components/review/ReadinessPipeline";
+import { songReadiness } from "@/lib/evidence";
 type AssetRef = { song_id: string; type: string; url?: string | null };
+type SplitRef = { song_id: string; percentage?: number | null };
 type ReviewEventRef = { created_at: string; event_type: string; session_id: string };
 type PlaylistRef = { id: string; title: string };
 type PlaylistTrackRef = { id: string; playlist_id: string; song_work_id: string };
@@ -20,6 +23,7 @@ export default function Page() {
   const [songs, setSongs] = useState<SongWork[]>([]);
   const [actions, setActions] = useState<ActionItem[]>([]);
   const [assets, setAssets] = useState<AssetRef[]>([]);
+  const [splits, setSplits] = useState<SplitRef[]>([]);
   const [reviewEvents, setReviewEvents] = useState<ReviewEventRef[]>([]);
   const [playlists, setPlaylists] = useState<PlaylistRef[]>([]);
   const [playlistTracks, setPlaylistTracks] = useState<PlaylistTrackRef[]>([]);
@@ -29,11 +33,12 @@ export default function Page() {
   useEffect(() => {
     setSkip(new URLSearchParams(window.location.search).get("skip") === "1");
     const load = async () => {
-      const [sRes, soRes, aRes, assetRes, reviewRes, plRes, trackRes, responseRes] = await Promise.all([
+      const [sRes, soRes, aRes, assetRes, splitRes, reviewRes, plRes, trackRes, responseRes] = await Promise.all([
         supabase.from("sessions").select("*").order("date", { ascending: false }),
         supabase.from("song_works").select("*").order("created_at", { ascending: false }),
         supabase.from("action_items").select("*").order("due_date", { ascending: true }),
         supabase.from("asset_links").select("song_id,type,url"),
+        supabase.from("song_writer_splits").select("song_id,percentage"),
         supabase.from("session_review_history").select("created_at,event_type,session_id").eq("event_type", "marked_reviewed").order("created_at", { ascending: false }),
         supabase.from("pitch_playlists").select("id,title"),
         supabase.from("pitch_playlist_tracks").select("id,playlist_id,song_work_id"),
@@ -43,6 +48,7 @@ export default function Page() {
       setSongs((soRes.data ?? []).map((r) => mapSong(r as Record<string, unknown>)));
       setActions((aRes.data ?? []).map((r) => mapAction(r as Record<string, unknown>)));
       setAssets((assetRes.data ?? []) as AssetRef[]);
+      setSplits((splitRes.data ?? []) as SplitRef[]);
       setReviewEvents((reviewRes.data ?? []) as ReviewEventRef[]);
       setPlaylists((plRes.data ?? []) as PlaylistRef[]);
       setPlaylistTracks((trackRes.data ?? []) as PlaylistTrackRef[]);
@@ -112,6 +118,26 @@ export default function Page() {
   const playlistTitleById = new Map(playlists.map((p) => [p.id, p.title]));
   const trackById = new Map(playlistTracks.map((t) => [t.id, t]));
   const songById = new Map(songs.map((s) => [s.id, s]));
+  const readinessItems: ReadinessItem[] = songs.slice(0, 16).map((song) => {
+    const relatedAssets = assets.filter((a) => a.song_id === song.id);
+    const relatedSplits = splits.filter((sp) => sp.song_id === song.id);
+    const relatedActions = actions.filter((a) => a.songId === song.id || a.sessionId === song.sessionId);
+    const status = songReadiness(
+      { id: song.id, title: song.title, bounce_link: song.bounceLink, lyrics_link: song.lyricsLink },
+      relatedAssets.map((a) => ({ song_id: a.song_id, type: a.type, url: a.url })),
+      relatedSplits.map((sp) => ({ song_id: sp.song_id, percentage: sp.percentage })),
+      relatedActions.map((a) => ({ status: a.status, song_id: a.songId, session_id: a.sessionId })),
+    );
+    const parent = sessions.find((s) => s.id === song.sessionId);
+    return {
+      id: song.id,
+      title: song.title || "Untitled Song",
+      type: "song",
+      status,
+      href: `/songs/${song.id}`,
+      context: parent ? `${parent.date} - ${parent.title || "Untitled Session"}` : "Unlinked",
+    };
+  });
 
   return (
     <div>
@@ -197,6 +223,12 @@ export default function Page() {
           <summary><span style={{ color: "#5f6b74", fontWeight: 600 }}>Playlist Responses ({responseCount})</span></summary>
           <div className="tableWrap"><table><thead><tr><th>When</th><th>Playlist</th><th>Song</th><th>Response</th><th>Sender</th><th>Open</th></tr></thead><tbody>{playlistResponses.length === 0 ? <tr><td colSpan={6} className="helper">No responses yet.</td></tr> : playlistResponses.map((r) => { const tr = r.playlist_track_id ? trackById.get(r.playlist_track_id) : undefined; const song = tr ? songById.get(tr.song_work_id) : undefined; return <tr key={r.id}><td>{new Date(r.created_at).toLocaleDateString()}</td><td>{playlistTitleById.get(r.playlist_id) || "Playlist"}</td><td>{song?.title || "Unknown song"}</td><td>{r.response_type}</td><td>{r.sender_name || <span className="helper">Unknown</span>}</td><td>{r.playlist_id ? <Link className="button compact" href={`/playlists/${r.playlist_id}`}>Playlist</Link> : <span className="helper">-</span>}</td></tr>; })}</tbody></table></div>
         </details>
+      </SectionCard>
+      </div>
+
+      <div className="section">
+      <SectionCard title="Pitch Readiness Command Centre">
+        <ReadinessPipeline items={readinessItems} />
       </SectionCard>
       </div>
 

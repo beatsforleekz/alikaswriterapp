@@ -153,6 +153,11 @@ tr:hover td { background: #f8f2ec; }
 
 .section { margin-top: 1rem; }
 .kv { display: grid; grid-template-columns: 220px 1fr; gap: .45rem .8rem; }
+.mobileOnly { display: none; }
+.desktopOnly { display: block; }
+.mobileCardList { display: grid; gap: .6rem; }
+.mobileDataCard { background: #fffdfb; border: 1px solid var(--line); border-radius: 12px; padding: .75rem; box-shadow: var(--shadow); }
+.mobileDataCard h4 { font-size: .98rem; margin-bottom: .35rem; }
 
 @media (max-width: 980px) {
   .appShell { grid-template-columns: 1fr; }
@@ -161,6 +166,9 @@ tr:hover td { background: #f8f2ec; }
   .mainArea { padding: 1rem; }
   .kv { grid-template-columns: 1fr; }
   .rowActions.compact { flex-wrap: wrap; }
+  .mobileOnly { display: block; }
+  .desktopOnly { display: none; }
+  .tableWrap table { min-width: 620px; }
 }
 
 .pitchPage {

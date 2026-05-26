@@ -219,7 +219,8 @@ export default function SongsPage() {
         {sortedFiltered.length === 0 ? (
           <EmptyState title="No songs/works yet" hint="Open a session to add songs and enrich catalogue records." action={<Link className="button primary" href="/sessions">Open Sessions</Link>} />
         ) : (
-          <div className="tableWrap">
+          <>
+          <div className="tableWrap desktopOnly">
             <table>
               <thead><tr><th>Title</th><th>Status</th><th>Tags</th><th>Bounce</th><th>Lyrics</th><th>Writers</th><th>Session</th><th>Actions</th></tr></thead>
               <tbody>
@@ -246,6 +247,31 @@ export default function SongsPage() {
               </tbody>
             </table>
           </div>
+          <div className="mobileOnly mobileCardList">
+            {sortedFiltered.map((s) => {
+              const songAssets = assets.filter((a) => a.song_id === s.id);
+              const hasBounce = Boolean(s.bounceLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "bounce" && Boolean(a.url));
+              const hasLyrics = Boolean(s.lyricsLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "lyrics" && Boolean(a.url));
+              const parent = sessions.find((x) => x.id === s.sessionId);
+              return (
+                <div key={`mobile-song-${s.id}`} className="mobileDataCard">
+                  <h4>{s.title || "Untitled Song"}</h4>
+                  <div className="rowActions compact" style={{ marginBottom: ".35rem" }}>
+                    <StatusBadge label={s.status} />
+                    <span className={`statusBadge ${hasBounce ? "sage" : "amber"}`}>{hasBounce ? "Bounce" : "Needs Bounce"}</span>
+                    <span className={`statusBadge ${hasLyrics ? "sage" : "amber"}`}>{hasLyrics ? "Lyrics" : "Needs Lyrics"}</span>
+                  </div>
+                  <p className="helper">{parent ? `${parent.date} - ${parent.title || "Untitled Session"}` : "Unlinked session"}</p>
+                  <div className="rowActions compact" style={{ marginTop: ".45rem" }}>
+                    <Link className="button compact" href={`/songs/${s.id}`}>Edit</Link>
+                    {parent ? <Link className="button compact" href={`/sessions/${parent.id}`}>Session</Link> : null}
+                    <button className="button compact" onClick={() => deleteSong(s.id)}>Delete</button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          </>
         )}
       </SectionCard>
     </div>

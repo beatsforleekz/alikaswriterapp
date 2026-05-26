@@ -11,6 +11,9 @@ import { supabase } from "@/lib/supabase";
 import { mapSession, mapSong, mapAction } from "@/lib/mappers";
 import { logSupabaseError, supabaseUserMessage } from "@/lib/supabaseError";
 import { isAllowedPitchAudio, uploadPitchAudio, removePitchAudio } from "@/lib/pitchAudio";
+import EvidenceHub from "@/components/review/EvidenceHub";
+import WriterSplitPanel from "@/components/review/WriterSplitPanel";
+import { normalizeEvidenceType, evidenceTypeLabel } from "@/lib/evidence";
 
 type AssetRow = { id: string; song_id: string; type: string; url?: string | null };
 type WriterRow = { id: string; name: string };
@@ -38,23 +41,8 @@ const ROLE_OPTIONS = [
   "Other",
 ] as const;
 
-const normalizeEvidenceType = (raw: string) => {
-  const t = raw.toLowerCase().trim();
-  if (["lyrics", "lyric", "lyrics", "song lyrics", "song_lyrics"].includes(t)) return "lyrics";
-  if (["bounce", "bounce in", "bounce_in"].includes(t)) return "bounce";
-  return t;
-};
-
 const evidenceLabel = (raw: string) => {
-  const n = normalizeEvidenceType(raw);
-  if (n === "lyrics") return "Lyrics";
-  if (n === "bounce") return "Bounce";
-  if (n === "dropbox") return "Dropbox";
-  if (n === "google_doc") return "Google Doc";
-  if (n === "apple_note") return "Apple Note";
-  if (n === "voice_note") return "Voice note";
-  if (n === "acapella") return "Acapella";
-  return raw;
+  return evidenceTypeLabel(raw);
 };
 
 export default function SessionDetailPage() {
@@ -801,76 +789,33 @@ export default function SessionDetailPage() {
           ) : null}
           <input value={writerSplitInput} onChange={(e) => setWriterSplitInput(e.target.value)} placeholder="Split %" style={{ maxWidth: 100 }} />
         </div>
-        {songs.length === 0 ? <p className="helper">No linked songs yet.</p> : (
-          <div className="tableWrap">
-            <table>
-              <thead><tr><th>Song</th><th>Writer</th><th>Role</th><th>Split %</th><th>Actions</th></tr></thead>
-              <tbody>
-                {songs.map((song) => {
-                  const rowsForSong = splitRows.filter((row) => row.song_id === song.id);
-                  const total = rowsForSong.reduce((sum, row) => sum + (row.percentage ?? 0), 0);
-                  const warn = rowsForSong.length > 0 && Math.round(total * 100) / 100 !== 100;
-                  if (rowsForSong.length === 0) {
-                    return (
-                      <tr key={`${song.id}-none`}>
-                        <td>{song.title || "Untitled"}</td>
-                        <td colSpan={4} className="helper">No writer/split rows yet.</td>
-                      </tr>
-                    );
-                  }
-                  return rowsForSong.map((row, idx) => (
-                    <tr key={row.id}>
-                      <td>{idx === 0 ? song.title || "Untitled" : ""}{idx === 0 && warn ? <span className="helper"> (total {total}%, not 100)</span> : null}</td>
-                      <td>{row.writer_name}</td>
-                      <td>
-                        <input
-                          list="role-options"
-                          value={splitDrafts[row.id]?.role ?? ""}
-                          onChange={(e) => setSplitDrafts((prev) => ({ ...prev, [row.id]: { ...(prev[row.id] || { role: "", split: "" }), role: e.target.value } }))}
-                          placeholder="Role"
-                          style={{ minWidth: 130 }}
-                        />
-                      </td>
-                      <td>
-                        <input
-                          value={splitDrafts[row.id]?.split ?? ""}
-                          onChange={(e) => setSplitDrafts((prev) => ({ ...prev, [row.id]: { ...(prev[row.id] || { role: "", split: "" }), split: e.target.value } }))}
-                          placeholder="%"
-                          style={{ maxWidth: 90 }}
-                        />
-                      </td>
-                      <td>
-                        <div className="rowActions compact">
-                          <button
-                            className="button compact"
-                            onClick={() => {
-                              const draft = splitDrafts[row.id] || { role: row.role || "", split: row.percentage?.toString() || "" };
-                              const nextSplit = draft.split.trim() ? Number(draft.split) : null;
-                              if (draft.split.trim() && Number.isNaN(nextSplit)) {
-                                setErrorMsg("Could not update split: split must be a number.");
-                                return;
-                              }
-                              updateSplit(row.id, { role: draft.role.trim() || null, percentage: nextSplit });
-                            }}
-                          >
-                            Save
-                          </button>
-                          <button
-                            className="button compact"
-                            onClick={() => deleteWriter(row.writer_id, row.writer_name)}
-                          >
-                            Delete Writer
-                          </button>
-                          <button className="button compact" onClick={() => deleteSplit(row.id)}>Delete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ));
-                })}
-              </tbody>
-            </table>
+        <WriterSplitPanel
+          rows={splitRows.map((row) => ({
+            ...row,
+            song_title: songs.find((song) => song.id === row.song_id)?.title || "Untitled",
+          }))}
+          onEdit={(id) => {
+            const row = splitRows.find((r) => r.id === id);
+            if (!row) return;
+            const draft = splitDrafts[row.id] || { role: row.role || "", split: row.percentage?.toString() || "" };
+            const nextSplit = draft.split.trim() ? Number(draft.split) : null;
+            if (draft.split.trim() && Number.isNaN(nextSplit)) {
+              setErrorMsg("Could not update split: split must be a number.");
+              return;
+            }
+            updateSplit(row.id, { role: draft.role.trim() || null, percentage: nextSplit });
+          }}
+          onDelete={deleteSplit}
+        />
+        {splitRows.length ? (
+          <div className="rowActions compact" style={{ marginTop: ".5rem", flexWrap: "wrap" }}>
+            {splitRows.map((row) => (
+              <button key={`delete-writer-${row.id}`} className="button compact" onClick={() => deleteWriter(row.writer_id, row.writer_name)}>
+                Remove Writer: {row.writer_name}
+              </button>
+            ))}
           </div>
-        )}
+        ) : null}
         <datalist id="role-options">
           {ROLE_OPTIONS.map((role) => <option key={role} value={role} />)}
         </datalist>
@@ -982,8 +927,24 @@ export default function SessionDetailPage() {
         )}
       </SectionCard>
 
-      <SectionCard title="Evidence / Assets" actions={<div id="add-asset" className="rowActions compact"><select value={assetSongId} onChange={(e)=>setAssetSongId(e.target.value)} style={{ minWidth: 160 }}><option value="">Select linked song</option>{songs.map((s)=><option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}</select><select value={assetType} onChange={(e)=>setAssetType(e.target.value)} style={{ minWidth: 180 }}><option value="bounce">Bounce</option><option value="lyrics">Lyrics</option><option value="acapella">Acapella</option><option value="voice_note">Voice Note</option><option value="apple_note">Apple Note</option><option value="google_doc">Google Doc</option><option value="dropbox">Dropbox</option><option value="message_evidence">Email/Pitch Trail</option><option value="screenshots">Screenshots</option><option value="other">Other</option></select><input value={assetUrl} onChange={(e)=>setAssetUrl(e.target.value)} placeholder="https://..." style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addAsset}>Add Asset/Evidence</button></div>}>
-        {assets.length === 0 ? <p className="helper">No assets/evidence linked yet.</p> : <div className="tableWrap"><table><thead><tr><th>Song</th><th>Type</th><th>Link</th><th>Actions</th></tr></thead><tbody>{assets.map((a)=><tr key={a.id}><td>{songs.find((s)=>s.id===a.song_id)?.title || a.song_id}</td><td>{evidenceLabel(a.type)}</td><td>{a.url ? <a href={a.url} target="_blank" rel="noreferrer">Open link</a> : <span className="helper">No link</span>}</td><td><div className="rowActions compact"><button className="button compact" onClick={()=>{ const next = window.prompt("Update evidence type", a.type); if (next !== null) updateAsset(a.id, { type: next }); }}>Edit Type</button><button className="button compact" onClick={()=>{ const next = window.prompt("Update evidence link", a.url || ""); if (next !== null) updateAsset(a.id, { url: next }); }}>Edit Link</button><button className="button compact" onClick={()=>deleteAsset(a.id)}>Delete</button></div></td></tr>)}</tbody></table></div>}
+      <SectionCard title="Evidence / Assets">
+        <EvidenceHub
+          title="Shared Evidence Hub"
+          songs={songs.map((s) => ({ id: s.id, title: s.title }))}
+          assets={assets}
+          addModel={{
+            songId: assetSongId,
+            type: assetType,
+            url: assetUrl,
+            setSongId: setAssetSongId,
+            setType: setAssetType,
+            setUrl: setAssetUrl,
+            onAdd: addAsset,
+          }}
+          onDelete={deleteAsset}
+          onEditType={(id, nextType) => updateAsset(id, { type: nextType })}
+          onEditUrl={(id, nextUrl) => updateAsset(id, { url: nextUrl })}
+        />
       </SectionCard>
 
       <SectionCard title="Actions / Follow-ups" actions={<div id="add-action" className="rowActions compact"><input value={newActionTask} onChange={(e)=>setNewActionTask(e.target.value)} placeholder="Follow-up task" style={{ minWidth: 220 }} /><input type="date" value={newActionDate} onChange={(e)=>setNewActionDate(e.target.value)} style={{ maxWidth: 170 }} /><button className="button primary compact" onClick={addAction}>Add Follow-up</button></div>}>

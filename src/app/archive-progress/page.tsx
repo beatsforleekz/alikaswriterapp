@@ -7,6 +7,10 @@ import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { logSupabaseError, supabaseUserMessage } from "@/lib/supabaseError";
+import EvidenceHub from "@/components/review/EvidenceHub";
+import WriterSplitPanel from "@/components/review/WriterSplitPanel";
+import ReadinessPipeline, { ReadinessItem } from "@/components/review/ReadinessPipeline";
+import { normalizeEvidenceType, songReadiness } from "@/lib/evidence";
 
 type SessionLite = {
   id: string;
@@ -26,13 +30,6 @@ type ActionLite = { id: string; session_id?: string | null; due_date?: string | 
 
 type ReviewFilter = "needs-review" | "all";
 const years = [2026, 2025, 2024, 2023, 2022, 2021];
-
-function normalizeEvidenceType(raw: string) {
-  const t = raw.toLowerCase().trim();
-  if (["lyrics", "lyric", "song lyrics", "song_lyrics"].includes(t)) return "lyrics";
-  if (["bounce", "bounce in", "bounce_in"].includes(t)) return "bounce";
-  return t;
-}
 
 function fmtDate(iso: string) {
   const d = new Date(iso);
@@ -597,6 +594,22 @@ export default function ArchiveProgressPage() {
     return { missingBounce, missingLyrics, weakPartial, followUps, scopedSplits: scopedSplits.length };
   }, [periodSessions, songs, assets, splits, actions]);
 
+  const readinessItems = useMemo<ReadinessItem[]>(() => {
+    return currentSongs.slice(0, 12).map((song) => {
+      const songAssets = currentAssets.filter((a) => a.song_id === song.id);
+      const songSplits = currentSplits.filter((s) => s.song_id === song.id);
+      const status = songReadiness(song, songAssets, songSplits, currentActions);
+      return {
+        id: song.id,
+        title: song.title || "Untitled Song",
+        type: "song",
+        status,
+        href: `/songs/${song.id}`,
+        context: current?.title || current?.date || "",
+      };
+    });
+  }, [currentSongs, currentAssets, currentSplits, currentActions, current?.title, current?.date]);
+
   return (
     <div>
       <PageHeader title="Archive Review" subtitle="Guided Archive Review workspace for chronological session processing." />
@@ -724,16 +737,34 @@ export default function ArchiveProgressPage() {
                 <button className="button compact" onClick={() => setCopyTargetSongIds(currentSongs.filter((s) => s.id !== copyFromSongId).map((s) => s.id))} disabled={!copyFromSongId}>Select All Targets</button>
                 <button className="button compact" onClick={() => setCopyTargetSongIds([])} disabled={!copyTargetSongIds.length}>Clear Targets</button>
               </div>
-              {currentSplits.length === 0 ? <p className="helper">No writers/splits added yet.</p> : (
-                <div className="tableWrap"><table><thead><tr><th>Song</th><th>Writer</th><th>Split</th><th>Actions</th></tr></thead><tbody>{currentSplits.map((sp) => <tr key={sp.id}><td>{currentSongs.find((s) => s.id === sp.song_id)?.title || "Untitled"}</td><td>{sp.writer_name}</td><td>{sp.percentage ?? <span className="helper">auto</span>}</td><td><div className="rowActions compact"><button className="button compact" onClick={() => editSplit(sp)}>Edit</button><button className="button compact" onClick={() => deleteSplit(sp.id)}>Delete</button></div></td></tr>)}</tbody></table></div>
-              )}
+              <WriterSplitPanel
+                rows={currentSplits.map((sp) => ({ ...sp, song_title: currentSongs.find((s) => s.id === sp.song_id)?.title || "Untitled" }))}
+                onEdit={(id) => { const row = currentSplits.find((sp) => sp.id === id); if (row) editSplit(row); }}
+                onDelete={deleteSplit}
+              />
             </SectionCard> : null}
 
-            {!focusMode ? <SectionCard title="Evidence / Assets" actions={<div className="rowActions compact"><select value={newAssetSongId} onChange={(e) => setNewAssetSongId(e.target.value)} style={{ minWidth: 160 }}><option value="">Select song</option>{currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}</select><select value={newAssetType} onChange={(e) => setNewAssetType(e.target.value)} style={{ minWidth: 160 }}><option value="bounce">Bounce</option><option value="lyrics">Lyrics</option><option value="acapella">Acapella</option><option value="voice_note">Voice Note</option><option value="apple_note">Apple Note</option><option value="google_doc">Google Doc</option><option value="dropbox">Dropbox</option><option value="message_evidence">Email/Pitch Trail</option><option value="screenshots">Screenshots</option><option value="other">Other</option></select><input value={newAssetUrl} onChange={(e) => setNewAssetUrl(e.target.value)} placeholder="https://..." style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addAsset}>Add Asset</button></div>}>
-              {currentAssets.length === 0 ? <p className="helper">No assets linked yet.</p> : (
-                <div className="tableWrap"><table><thead><tr><th>Song</th><th>Type</th><th>Link</th><th>Action</th></tr></thead><tbody>{currentAssets.map((a) => <tr key={a.id}><td>{currentSongs.find((s) => s.id === a.song_id)?.title || "Untitled"}</td><td>{a.type}</td><td>{a.url ? <a href={a.url} target="_blank" rel="noreferrer">Open</a> : <span className="helper">No link</span>}</td><td><button className="button compact" onClick={() => deleteAsset(a.id)}>Delete</button></td></tr>)}</tbody></table></div>
-              )}
+            {!focusMode ? <SectionCard title="Evidence / Assets">
+              <EvidenceHub
+                title="Shared Evidence Hub"
+                songs={currentSongs.map((s) => ({ id: s.id, title: s.title }))}
+                assets={currentAssets}
+                addModel={{
+                  songId: newAssetSongId,
+                  type: newAssetType,
+                  url: newAssetUrl,
+                  setSongId: setNewAssetSongId,
+                  setType: setNewAssetType,
+                  setUrl: setNewAssetUrl,
+                  onAdd: addAsset,
+                }}
+                onDelete={deleteAsset}
+              />
             </SectionCard> : null}
+
+            <SectionCard title="Readiness Pipeline">
+              <ReadinessPipeline items={readinessItems} title="Current Session Readiness" />
+            </SectionCard>
 
             <SectionCard title="Follow-up Actions">
               {currentActions.length ? <div className="tableWrap"><table><thead><tr><th>Due</th><th>Task</th><th>Status</th><th>Actions</th></tr></thead><tbody>{currentActions.map((a) => <tr key={a.id}><td>{a.due_date || <span className="helper">No date</span>}</td><td>{a.task}</td><td><select value={a.status} onChange={(e) => updateActionStatus(a.id, e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select></td><td><div className="rowActions compact"><button className="button compact" onClick={() => editActionTask(a)}>Edit</button><button className="button compact" onClick={() => deleteAction(a.id)}>Delete</button></div></td></tr>)}</tbody></table></div> : <p className="helper">No follow-ups yet.</p>}

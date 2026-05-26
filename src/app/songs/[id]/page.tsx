@@ -10,13 +10,16 @@ import SectionCard from "@/components/ui/SectionCard";
 import StatusBadge from "@/components/ui/StatusBadge";
 import { logSupabaseError, supabaseUserMessage } from "@/lib/supabaseError";
 import { isAllowedPitchAudio, uploadPitchAudio, removePitchAudio, getPlayableAudioUrl } from "@/lib/pitchAudio";
+import EvidenceHub from "@/components/review/EvidenceHub";
+import WriterSplitPanel from "@/components/review/WriterSplitPanel";
+import { songReadiness } from "@/lib/evidence";
 
 export default function SongDetail() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const [song, setSong] = useState<ReturnType<typeof mapSong> | null>(null);
   const [sessionRef, setSessionRef] = useState<{ id: string; title: string; date: string } | null>(null);
-  const [assets, setAssets] = useState<Array<{ id: string; type: string; url?: string | null }>>([]);
+  const [assets, setAssets] = useState<Array<{ id: string; song_id: string; type: string; url?: string | null }>>([]);
   const [splits, setSplits] = useState<Array<{ id: string; percentage?: number | null; role?: string | null; writer_name: string }>>([]);
   const [error, setError] = useState("");
   const [audioUrl, setAudioUrl] = useState("");
@@ -28,6 +31,7 @@ export default function SongDetail() {
   const [notesDraft, setNotesDraft] = useState("");
   const [bounceDraft, setBounceDraft] = useState("");
   const [lyricsDraft, setLyricsDraft] = useState("");
+  const [songActions, setSongActions] = useState<Array<{ status?: string | null; song_id?: string | null }>>([]);
 
   useEffect(() => {
     const load = async () => {
@@ -52,7 +56,9 @@ export default function SongDetail() {
       }
 
       const { data: aData } = await supabase.from("asset_links").select("id,type,url").eq("song_id", params.id);
-      setAssets((aData ?? []) as Array<{ id: string; type: string; url?: string | null }>);
+      setAssets((aData ?? []).map((a) => ({ ...(a as { id: string; type: string; url?: string | null }), song_id: params.id })) as Array<{ id: string; song_id: string; type: string; url?: string | null }>);
+      const { data: actionRows } = await supabase.from("action_items").select("song_id,status").eq("song_id", params.id);
+      setSongActions((actionRows ?? []) as Array<{ status?: string | null; song_id?: string | null }>);
       const [{ data: tagDirectory }, { data: tagLinks }] = await Promise.all([
         supabase.from("song_tags").select("id,name").order("name", { ascending: true }),
         supabase.from("song_work_tags").select("id,tag_id,song_tags(name)").eq("song_id", params.id),
@@ -149,6 +155,13 @@ export default function SongDetail() {
     router.push("/songs");
   };
 
+  const readiness = songReadiness(
+    { id: song.id, title: song.title, bounce_link: bounceDraft, lyrics_link: lyricsDraft },
+    assets.map((a) => ({ song_id: song.id, type: a.type, url: a.url })),
+    splits.map((s) => ({ song_id: song.id, percentage: s.percentage })),
+    songActions,
+  );
+
   return (
     <div>
       <PageHeader title={song.title || "Untitled Song"} subtitle="Library view. Manage this song from its Session workspace." actions={<div className="rowActions">{sessionRef ? <Link className="button" href={`/sessions/${sessionRef.id}`}>Open Session Workspace</Link> : null}<button className="button primary" onClick={saveSongCore}>Save Changes</button><button className="button" onClick={deleteSong}>Delete Song/Work</button></div>} />
@@ -159,6 +172,7 @@ export default function SongDetail() {
           <dt>Title</dt><dd><input value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} /></dd>
           <dt>Status</dt><dd><select value={statusDraft} onChange={(e) => setStatusDraft(e.target.value)}><option>Started</option><option>Written</option><option>Bounce In</option><option>Assets Filed</option><option>Pitched</option><option>On Hold</option><option>Cut</option><option>Approved</option><option>Released</option><option>Disputed</option><option>Registered</option><option>Complete</option></select></dd>
           <dt>Current Status</dt><dd><StatusBadge label={song.status} /></dd>
+          <dt>Pitch Readiness</dt><dd><StatusBadge label={readiness} /></dd>
           <dt>Tags</dt><dd><div className="rowActions compact"><input list="song-tag-options-detail" value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="Type or reuse tag" /><button className="button compact" type="button" onClick={addTag}>Add Tag</button></div><datalist id="song-tag-options-detail">{tagOptions.map((tag) => <option key={tag.id} value={tag.name} />)}</datalist><div className="rowActions compact" style={{ marginTop: ".4rem" }}>{songTags.length ? songTags.map((tag) => <button key={tag.id} className="button compact" type="button" onClick={() => removeTag(tag.id)}>{tag.name} ✕</button>) : <span className="helper">No tags</span>}</div></dd>
           <dt>Session</dt><dd>{sessionRef ? <Link href={`/sessions/${sessionRef.id}`}>{sessionRef.date} - {sessionRef.title || "Untitled Session"}</Link> : <span className="helper">Unlinked session</span>}</dd>
           <dt>Bounce Link</dt><dd><input value={bounceDraft} onChange={(e) => setBounceDraft(e.target.value)} placeholder="https://..." /></dd>
@@ -168,15 +182,17 @@ export default function SongDetail() {
       </SectionCard>
 
       <SectionCard title="Evidence">
-        {assets.length === 0 ? <p className="helper">No evidence linked.</p> : (
-          <div className="tableWrap"><table><thead><tr><th>Type</th><th>Link</th></tr></thead><tbody>{assets.map((a)=><tr key={a.id}><td>{a.type === "bounce" ? "Bounce" : a.type}</td><td>{a.url ? <a href={a.url} target="_blank" rel="noreferrer">Open link</a> : <span className="helper">No URL</span>}</td></tr>)}</tbody></table></div>
-        )}
+        <EvidenceHub
+          title="Shared Evidence Hub"
+          songs={[{ id: song.id, title: song.title }]}
+          assets={assets.map((a) => ({ id: a.id, song_id: song.id, type: a.type, url: a.url }))}
+        />
       </SectionCard>
 
       <SectionCard title="Writers / Splits">
-        {splits.length === 0 ? <p className="helper">No writer split rows yet.</p> : (
-          <div className="tableWrap"><table><thead><tr><th>Writer</th><th>Role</th><th>Split %</th></tr></thead><tbody>{splits.map((split)=><tr key={split.id}><td>{split.writer_name}</td><td>{split.role || <span className="helper">No role</span>}</td><td>{split.percentage ?? <span className="helper">auto</span>}</td></tr>)}</tbody></table></div>
-        )}
+        <WriterSplitPanel
+          rows={splits.map((split) => ({ ...split, song_id: song.id, song_title: song.title || "Untitled", writer_name: split.writer_name }))}
+        />
       </SectionCard>
 
       <SectionCard title="Pitch Audio">
