@@ -690,7 +690,8 @@ export default function ArchiveProgressPage() {
 
             {!focusMode ? <SectionCard title="Songs / Works" actions={<div className="rowActions compact"><input value={newSongTitle} onChange={(e) => setNewSongTitle(e.target.value)} placeholder="Add song/work title" style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addSong}>Add Song</button></div>}>
               {currentSongs.length === 0 ? <p className="helper">No linked songs/works yet.</p> : (
-                <div className="tableWrap">
+                <>
+                <div className="tableWrap desktopOnly">
                   <table>
                     <thead><tr><th>Title</th><th>Bounce Link</th><th>Lyrics Link</th><th>Actions</th></tr></thead>
                     <tbody>
@@ -705,6 +706,20 @@ export default function ArchiveProgressPage() {
                     </tbody>
                   </table>
                 </div>
+                <div className="mobileOnly mobileCardList">
+                  {currentSongs.map((song) => (
+                    <div key={`mobile-review-song-${song.id}`} className="mobileDataCard">
+                      <h4>{song.title || "Untitled"}</h4>
+                      <p className="helper">{songDrafts[song.id]?.bounce ? "Bounce linked" : "No bounce"} · {songDrafts[song.id]?.lyrics ? "Lyrics linked" : "No lyrics"}</p>
+                      <div className="rowActions compact" style={{ marginTop: ".4rem" }}>
+                        <button className="button compact" onClick={() => updateSongField(song.id, { title: songDrafts[song.id]?.title ?? "", bounce_link: (songDrafts[song.id]?.bounce || "").trim() || null, lyrics_link: (songDrafts[song.id]?.lyrics || "").trim() || null })}>Save</button>
+                        <button className="button compact" onClick={() => deleteSong(song.id)}>Delete</button>
+                        <Link className="button compact" href={`/songs/${song.id}`}>Song</Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                </>
               )}
             </SectionCard> : null}
 
@@ -739,6 +754,17 @@ export default function ArchiveProgressPage() {
               </div>
               <WriterSplitPanel
                 rows={currentSplits.map((sp) => ({ ...sp, song_title: currentSongs.find((s) => s.id === sp.song_id)?.title || "Untitled" }))}
+                addModel={{
+                  songId: splitSongId,
+                  writerName: splitWriterName,
+                  splitPct: splitPct,
+                  setSongId: setSplitSongId,
+                  setWriterName: setSplitWriterName,
+                  setSplitPct: setSplitPct,
+                  onAdd: addSplit,
+                  writerOptions: writers.map((w) => w.name),
+                  songOptions: currentSongs.map((s) => ({ id: s.id, title: s.title || "Untitled" })),
+                }}
                 onEdit={(id) => { const row = currentSplits.find((sp) => sp.id === id); if (row) editSplit(row); }}
                 onDelete={deleteSplit}
               />
@@ -767,7 +793,10 @@ export default function ArchiveProgressPage() {
             </SectionCard>
 
             <SectionCard title="Follow-up Actions">
-              {currentActions.length ? <div className="tableWrap"><table><thead><tr><th>Due</th><th>Task</th><th>Status</th><th>Actions</th></tr></thead><tbody>{currentActions.map((a) => <tr key={a.id}><td>{a.due_date || <span className="helper">No date</span>}</td><td>{a.task}</td><td><select value={a.status} onChange={(e) => updateActionStatus(a.id, e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select></td><td><div className="rowActions compact"><button className="button compact" onClick={() => editActionTask(a)}>Edit</button><button className="button compact" onClick={() => deleteAction(a.id)}>Delete</button></div></td></tr>)}</tbody></table></div> : <p className="helper">No follow-ups yet.</p>}
+              {currentActions.length ? <>
+                <div className="tableWrap desktopOnly"><table><thead><tr><th>Due</th><th>Task</th><th>Status</th><th>Actions</th></tr></thead><tbody>{currentActions.map((a) => <tr key={a.id}><td>{a.due_date || <span className="helper">No date</span>}</td><td>{a.task}</td><td><select value={a.status} onChange={(e) => updateActionStatus(a.id, e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select></td><td><div className="rowActions compact"><button className="button compact" onClick={() => editActionTask(a)}>Edit</button><button className="button compact" onClick={() => deleteAction(a.id)}>Delete</button></div></td></tr>)}</tbody></table></div>
+                <div className="mobileOnly mobileCardList">{currentActions.map((a) => <div key={`mobile-review-action-${a.id}`} className="mobileDataCard"><h4>{a.task || "Untitled task"}</h4><p className="helper">{a.due_date || "No date"}</p><div className="rowActions compact" style={{ marginTop: ".4rem" }}><select value={a.status} onChange={(e) => updateActionStatus(a.id, e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select><button className="button compact" onClick={() => editActionTask(a)}>Edit</button><button className="button compact" onClick={() => deleteAction(a.id)}>Delete</button></div></div>)}</div>
+              </> : <p className="helper">No follow-ups yet.</p>}
               <div className="rowActions compact" style={{ marginTop: ".5rem" }}>
                 <input value={followUpTask} onChange={(e) => setFollowUpTask(e.target.value)} placeholder="Add follow-up task" style={{ minWidth: 240 }} />
                 <input type="date" value={followUpDue} onChange={(e) => setFollowUpDue(e.target.value)} style={{ maxWidth: 180 }} />

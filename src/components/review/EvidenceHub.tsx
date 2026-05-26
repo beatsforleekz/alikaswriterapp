@@ -53,7 +53,7 @@ export default function EvidenceHub({
           </select>
           <select value={addModel.type} onChange={(e) => addModel.setType(e.target.value)} style={{ minWidth: 160 }}>
             <option value="bounce">Bounce</option><option value="lyrics">Lyrics</option><option value="acapella">Acapella</option>
-            <option value="voice_note">Voice Note</option><option value="google_doc">Google Doc</option><option value="dropbox">Dropbox</option>
+            <option value="voice_note">Voice Note</option><option value="apple_note">Apple Note</option><option value="google_doc">Google Doc</option><option value="dropbox">Dropbox</option>
             <option value="message_evidence">Email/Pitch Trail</option><option value="screenshots">Screenshots</option><option value="other">Other</option>
           </select>
           <input value={addModel.url} onChange={(e) => addModel.setUrl(e.target.value)} placeholder="https://..." style={{ minWidth: 220 }} />
@@ -62,8 +62,9 @@ export default function EvidenceHub({
       ) : null}
 
       {assets.length === 0 ? <p className="helper">No evidence linked yet.</p> : (
-        <div className="tableWrap">
-          <table>
+        <>
+          <div className="tableWrap desktopOnly">
+            <table>
             <thead><tr><th>Song</th><th>Type</th><th>Link</th><th>Actions</th></tr></thead>
             <tbody>
               {assets.map((asset) => (
@@ -81,8 +82,23 @@ export default function EvidenceHub({
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+            </table>
+          </div>
+          <div className="mobileOnly mobileCardList">
+            {assets.map((asset) => (
+              <div key={`mobile-evidence-${asset.id}`} className="mobileDataCard">
+                <h4>{songs.find((s) => s.id === asset.song_id)?.title || "Untitled"}</h4>
+                <p className="helper">{evidenceTypeLabel(asset.type)}</p>
+                <div className="rowActions compact" style={{ marginTop: ".35rem" }}>
+                  {asset.url ? <a className="button compact" href={asset.url} target="_blank" rel="noreferrer">Open</a> : <span className="helper">No link</span>}
+                  {onEditType ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence type", asset.type); if (next !== null) onEditType(asset.id, next); }}>Type</button> : null}
+                  {onEditUrl ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence link", asset.url || ""); if (next !== null) onEditUrl(asset.id, next); }}>Link</button> : null}
+                  {onDelete ? <button className="button compact" onClick={() => onDelete(asset.id)}>Delete</button> : null}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );

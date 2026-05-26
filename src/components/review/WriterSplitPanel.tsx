@@ -16,6 +16,7 @@ type AddModel = {
   setSplitPct: (v: string) => void;
   onAdd: () => void;
   writerOptions: string[];
+  songOptions?: Array<{ id: string; title: string }>;
 };
 
 export default function WriterSplitPanel({
@@ -41,7 +42,7 @@ export default function WriterSplitPanel({
         <div className="rowActions compact" style={{ marginBottom: ".55rem" }}>
           <select value={addModel.songId} onChange={(e) => addModel.setSongId(e.target.value)} style={{ minWidth: 180 }}>
             <option value="">Select song</option>
-            {Object.entries(rows.reduce<Record<string, string>>((acc, r) => { acc[r.song_id] = r.song_title; return acc; }, {})).map(([id, title]) => (
+            {(addModel.songOptions?.length ? addModel.songOptions : Object.entries(rows.reduce<Record<string, string>>((acc, r) => { acc[r.song_id] = r.song_title; return acc; }, {})).map(([id, title]) => ({ id, title }))).map(({ id, title }) => (
               <option key={id} value={id}>{title || "Untitled"}</option>
             ))}
           </select>
@@ -59,7 +60,7 @@ export default function WriterSplitPanel({
               <span key={songId} className={`statusBadge ${Math.round(total) === 100 ? "sage" : "amber"}`}>{rows.find((r) => r.song_id === songId)?.song_title || "Song"}: {total.toFixed(2)}%</span>
             ))}
           </div>
-          <div className="tableWrap">
+          <div className="tableWrap desktopOnly">
             <table>
               <thead><tr><th>Song</th><th>Writer</th><th>Role</th><th>Split</th><th>Actions</th></tr></thead>
               <tbody>
@@ -79,6 +80,18 @@ export default function WriterSplitPanel({
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="mobileOnly mobileCardList">
+            {rows.map((row) => (
+              <div key={`mobile-split-${row.id}`} className="mobileDataCard">
+                <h4>{row.song_title || "Untitled"}</h4>
+                <p className="helper">{row.writer_name} · {row.role || "No role"} · {row.percentage ?? "auto"}%</p>
+                <div className="rowActions compact" style={{ marginTop: ".4rem" }}>
+                  {onEdit ? <button className="button compact" onClick={() => onEdit(row.id)}>Edit</button> : null}
+                  {onDelete ? <button className="button compact" onClick={() => onDelete(row.id)}>Delete</button> : null}
+                </div>
+              </div>
+            ))}
           </div>
         </>
       )}

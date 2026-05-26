@@ -32,6 +32,13 @@ export default function SongDetail() {
   const [bounceDraft, setBounceDraft] = useState("");
   const [lyricsDraft, setLyricsDraft] = useState("");
   const [songActions, setSongActions] = useState<Array<{ status?: string | null; song_id?: string | null }>>([]);
+  const [assetType, setAssetType] = useState("other");
+  const [assetUrl, setAssetUrl] = useState("");
+  const [writerDirectory, setWriterDirectory] = useState<Array<{ id: string; name: string }>>([]);
+  const [newWriterName, setNewWriterName] = useState("");
+  const [newSplitPct, setNewSplitPct] = useState("");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -86,6 +93,8 @@ export default function SongDetail() {
           }),
         );
       }
+      const { data: writerRows } = await supabase.from("writers").select("id,name").order("name", { ascending: true });
+      setWriterDirectory((writerRows ?? []) as Array<{ id: string; name: string }>);
     };
     load();
   }, [params.id]);
@@ -119,6 +128,7 @@ export default function SongDetail() {
   };
 
   const saveSongCore = async () => {
+    setSaveState("saving");
     const { error: songErr } = await supabase
       .from("song_works")
       .update({
@@ -132,6 +142,7 @@ export default function SongDetail() {
     if (songErr) {
       logSupabaseError("Failed to save song core from library view", songErr);
       setError(supabaseUserMessage("Could not save song/work changes", songErr));
+      setSaveState("error");
       return;
     }
     setSong((prev) => prev ? {
@@ -142,6 +153,94 @@ export default function SongDetail() {
       bounceLink: bounceDraft.trim() || undefined,
       lyricsLink: lyricsDraft.trim() || undefined,
     } : prev);
+    setSaveState("saved");
+    setLastSavedAt(new Date().toLocaleString());
+    window.setTimeout(() => setSaveState("idle"), 1200);
+  };
+
+  const addEvidence = async () => {
+    if (!assetUrl.trim()) return;
+    const normalizedUrl = assetUrl.trim();
+    const exists = assets.some((a) => String(a.type).toLowerCase() === String(assetType).toLowerCase() && String(a.url || "").trim() === normalizedUrl);
+    if (exists) {
+      setError("That evidence link is already saved for this song.");
+      return;
+    }
+    const { data, error: addErr } = await supabase.from("asset_links").insert({ song_id: song.id, type: assetType, url: normalizedUrl }).select("id,type,url").single();
+    if (addErr) {
+      logSupabaseError("Failed to add evidence on song detail", addErr);
+      setError(supabaseUserMessage("Could not add evidence", addErr));
+      return;
+    }
+    if (data) setAssets((prev) => [...prev, { ...(data as { id: string; type: string; url?: string | null }), song_id: song.id }]);
+    setAssetUrl("");
+  };
+
+  const deleteEvidence = async (id: string) => {
+    const { error: delErr } = await supabase.from("asset_links").delete().eq("id", id);
+    if (delErr) {
+      logSupabaseError("Failed to delete evidence on song detail", delErr);
+      setError(supabaseUserMessage("Could not delete evidence", delErr));
+      return;
+    }
+    setAssets((prev) => prev.filter((a) => a.id !== id));
+  };
+
+  const addSplit = async () => {
+    const clean = newWriterName.trim();
+    if (!clean) return;
+    let writerId = writerDirectory.find((w) => w.name.toLowerCase() === clean.toLowerCase())?.id;
+    if (!writerId) {
+      const { data, error: createErr } = await supabase.from("writers").insert({ name: clean }).select("id,name").single();
+      if (createErr || !data) {
+        logSupabaseError("Failed to create writer on song detail", createErr);
+        setError(supabaseUserMessage("Could not create writer", createErr));
+        return;
+      }
+      writerId = String((data as { id: string }).id);
+      setWriterDirectory((prev) => [...prev, { id: writerId as string, name: clean }].sort((a, b) => a.name.localeCompare(b.name)));
+    }
+    const pct = newSplitPct.trim() ? Number(newSplitPct) : null;
+    if (newSplitPct.trim() && Number.isNaN(pct)) {
+      setError("Split % must be a number.");
+      return;
+    }
+    const { error: splitErr } = await supabase.from("song_writer_splits").insert({ song_id: song.id, writer_id: writerId, percentage: pct });
+    if (splitErr) {
+      logSupabaseError("Failed to add writer split on song detail", splitErr);
+      setError(supabaseUserMessage("Could not add writer/split", splitErr));
+      return;
+    }
+    setNewWriterName("");
+    setNewSplitPct("");
+    window.location.reload();
+  };
+
+  const editSplit = async (id: string) => {
+    const current = splits.find((s) => s.id === id);
+    if (!current) return;
+    const pctRaw = window.prompt("Split % (blank for auto)", current.percentage === null || current.percentage === undefined ? "" : String(current.percentage));
+    if (pctRaw === null) return;
+    const pct = pctRaw.trim() ? Number(pctRaw) : null;
+    if (pctRaw.trim() && Number.isNaN(pct)) return;
+    const { error: updErr } = await supabase.from("song_writer_splits").update({ percentage: pct }).eq("id", id);
+    if (updErr) {
+      logSupabaseError("Failed to edit writer split on song detail", updErr);
+      setError(supabaseUserMessage("Could not update writer/split", updErr));
+      return;
+    }
+    setSplits((prev) => prev.map((s) => (s.id === id ? { ...s, percentage: pct } : s)));
+  };
+
+  const removeSplit = async (id: string) => {
+    if (!window.confirm("Delete this writer/split row?")) return;
+    const { error: delErr } = await supabase.from("song_writer_splits").delete().eq("id", id);
+    if (delErr) {
+      logSupabaseError("Failed to delete writer split on song detail", delErr);
+      setError(supabaseUserMessage("Could not delete writer/split", delErr));
+      return;
+    }
+    setSplits((prev) => prev.filter((s) => s.id !== id));
   };
 
   const deleteSong = async () => {
@@ -166,6 +265,7 @@ export default function SongDetail() {
     <div>
       <PageHeader title={song.title || "Untitled Song"} subtitle="Library view. Manage this song from its Session workspace." actions={<div className="rowActions">{sessionRef ? <Link className="button" href={`/sessions/${sessionRef.id}`}>Open Session Workspace</Link> : null}<button className="button primary" onClick={saveSongCore}>Save Changes</button><button className="button" onClick={deleteSong}>Delete Song/Work</button></div>} />
       {error ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{error}</p> : null}
+      <p className="helper" style={{ marginBottom: ".7rem" }}>{saveState === "saving" ? "Saving..." : saveState === "saved" ? `Saved ${lastSavedAt}` : saveState === "error" ? "Could not save changes" : (lastSavedAt ? `Last saved ${lastSavedAt}` : "")}</p>
 
       <SectionCard title="Overview">
         <div className="kv">
@@ -186,12 +286,35 @@ export default function SongDetail() {
           title="Shared Evidence Hub"
           songs={[{ id: song.id, title: song.title }]}
           assets={assets.map((a) => ({ id: a.id, song_id: song.id, type: a.type, url: a.url }))}
+          addModel={{
+            songId: song.id,
+            type: assetType,
+            url: assetUrl,
+            setSongId: () => {},
+            setType: setAssetType,
+            setUrl: setAssetUrl,
+            onAdd: addEvidence,
+          }}
+          onDelete={deleteEvidence}
         />
       </SectionCard>
 
       <SectionCard title="Writers / Splits">
         <WriterSplitPanel
           rows={splits.map((split) => ({ ...split, song_id: song.id, song_title: song.title || "Untitled", writer_name: split.writer_name }))}
+          addModel={{
+            songId: song.id,
+            writerName: newWriterName,
+            splitPct: newSplitPct,
+            setSongId: () => {},
+            setWriterName: setNewWriterName,
+            setSplitPct: setNewSplitPct,
+            onAdd: addSplit,
+            writerOptions: writerDirectory.map((w) => w.name),
+            songOptions: [{ id: song.id, title: song.title || "Untitled" }],
+          }}
+          onEdit={editSplit}
+          onDelete={removeSplit}
         />
       </SectionCard>
 

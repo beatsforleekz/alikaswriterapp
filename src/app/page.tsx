@@ -95,8 +95,10 @@ export default function Page() {
   }).length;
   const activeActions = actions.filter((a) => a.status !== "Done");
   const upcoming = [...activeActions].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const today = new Date().toISOString().slice(0, 10);
   const currentYear = new Date().getFullYear();
   const yearSessions = sessions.filter((s) => s.date.startsWith(String(currentYear)));
+  const currentMonth = new Date().toISOString().slice(0, 7);
   const latestReviewEvent = reviewEvents[0];
   const latestAudited = latestReviewEvent
     ? new Date(latestReviewEvent.created_at).toLocaleString(undefined, {
@@ -138,91 +140,97 @@ export default function Page() {
       context: parent ? `${parent.date} - ${parent.title || "Untitled Session"}` : "Unlinked",
     };
   });
+  const pitchReadyCount = readinessItems.filter((r) => r.status === "Ready to Pitch").length;
+  const pitchReadyBlockers = readinessItems.filter((r) => r.status !== "Ready to Pitch").length;
+  const sessionsNotReviewed = sessions.filter((s) => s.archive_reviewed !== true);
+  const reviewedThisYear = reviewEvents.filter((e) => String(e.created_at || "").startsWith(String(currentYear))).length;
+  const reviewedThisMonth = reviewEvents.filter((e) => String(e.created_at || "").startsWith(currentMonth)).length;
+  const reviewedThisWeek = reviewEvents.filter((e) => {
+    const d = new Date(e.created_at);
+    const now = new Date();
+    return (now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24) <= 7;
+  }).length;
+  const worksLoggedThisYear = songs.filter((s) => {
+    const parent = sessions.find((se) => se.id === s.sessionId);
+    return Boolean(parent?.date?.startsWith(String(currentYear)));
+  }).length;
+  const archiveCompletenessPct = sessions.length ? Math.round((sessions.filter((s) => s.archive_reviewed).length / sessions.length) * 100) : 0;
+  const holdInterestedResponses = playlistResponses.filter((r) => {
+    const t = String(r.response_type || "").toLowerCase();
+    return t.includes("hold") || t.includes("interested");
+  });
+  const overdueActions = activeActions.filter((a) => a.dueDate && a.dueDate < today);
+  const dueSoonActions = activeActions.filter((a) => a.dueDate && a.dueDate >= today && a.dueDate <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10));
+  const unresolvedSplitSongIds = new Set<string>();
+  for (const song of songs) {
+    const songSplits = splits.filter((sp) => sp.song_id === song.id);
+    if (!songSplits.length) {
+      unresolvedSplitSongIds.add(song.id);
+      continue;
+    }
+    const total = songSplits.reduce((sum, sp) => sum + (sp.percentage ?? 0), 0);
+    if (Math.round(total * 100) / 100 !== 100) unresolvedSplitSongIds.add(song.id);
+  }
+  const unresolvedSplitSongs = songs.filter((s) => unresolvedSplitSongIds.has(s.id));
+  const pitchedSongs = songs.filter((s) => ["Pitched", "On Hold", "Cut", "Released"].includes(s.status));
+  const weakEvidenceSessions = sessions.filter((s) => !s.evidence_strength || s.evidence_strength === "Weak" || s.evidence_strength === "Partial");
+  const topBlockerSongs = readinessItems.filter((r) => r.status !== "Ready to Pitch").slice(0, 5);
 
   return (
     <div>
       <PageHeader title="Dashboard" subtitle="Archive command centre for your catalogue workflow." />
-      <SectionCard title="Immediate Actions">
+      <SectionCard title="What Matters" actions={<Link className="button primary" href={overdueActions.length ? "/actions" : holdInterestedResponses.length ? "/playlists" : "/archive-progress"}>{overdueActions.length ? "Handle Overdue Actions" : holdInterestedResponses.length ? "Review Playlist Responses" : "Open Archive Review"}</Link>}>
         <div className="grid cards">
-          <StatCard label="Songs Missing Bounce" value={missingBounce} tone={missingBounce > 0 ? "danger" : "success"} href="#warn-missing-bounce" />
-          <StatCard label="Songs Missing Lyrics" value={missingLyrics} tone={missingLyrics > 0 ? "danger" : "success"} href="#warn-missing-lyrics" />
-          <StatCard label="Sessions with 0 Songs" value={sessionsWithNoSongs} tone={sessionsWithNoSongs > 0 ? "amber" : "success"} href="#warn-no-songs" />
-          <StatCard label="Sessions with 0 Bounce" value={sessionsWithNoBounce} tone={sessionsWithNoBounce > 0 ? "amber" : "success"} href="#warn-session-no-bounce" />
+          <StatCard label="Hold/Interested Responses" value={holdInterestedResponses.length} tone={holdInterestedResponses.length ? "amber" : "success"} href="/playlists" />
+          <StatCard label="Disputed Songs" value={disputed} tone={disputed ? "danger" : "success"} href="/songs?filter=disputed" />
+          <StatCard label="Songs with Pitch Activity" value={pitchedSongs.length} tone={pitchedSongs.length ? "neutral" : "success"} href="/songs?filter=pitched" />
+          <StatCard label="Overdue Follow-ups" value={overdueActions.length} tone={overdueActions.length ? "danger" : "success"} href="/actions" />
+        </div>
+        <div className="rowActions compact" style={{ marginTop: ".65rem", flexWrap: "wrap" }}>
+          {topBlockerSongs.length ? topBlockerSongs.map((r) => <Link key={r.id} className="button compact" href={r.href}>{r.title}: {r.status}</Link>) : <span className="helper">No high-priority pitch blockers.</span>}
         </div>
       </SectionCard>
       <div className="section">
-      <SectionCard title="Evidence Risks">
+      <SectionCard title="What’s Missing" actions={<Link className="button" href="/archive-progress">Resolve In Archive Review</Link>}>
         <div className="grid cards">
-          <StatCard label="Weak/Partial Evidence" value={weakPartialSessions.length} tone={weakPartialSessions.length > 0 ? "amber" : "success"} href="#warn-weak-partial" />
-          <StatCard label="Disputed" value={disputed} tone={disputed > 0 ? "danger" : "success"} href="#warn-disputed" />
-          <StatCard label="Active Follow-ups" value={activeActions.length} tone={activeActions.length > 0 ? "amber" : "success"} href="/actions" />
-          <StatCard label="Playlist Responses" value={responseCount} tone={responseCount > 0 ? "neutral" : "success"} href="#warn-playlist-responses" />
+          <StatCard label="Songs Missing Bounce" value={missingBounce} tone={missingBounce ? "danger" : "success"} href="/songs?filter=no-bounce" />
+          <StatCard label="Songs Missing Lyrics" value={missingLyrics} tone={missingLyrics ? "danger" : "success"} href="/songs?filter=no-lyrics" />
+          <StatCard label="Unresolved Splits" value={unresolvedSplitSongs.length} tone={unresolvedSplitSongs.length ? "amber" : "success"} href="/songs" />
+          <StatCard label="Weak/Partial Evidence" value={weakEvidenceSessions.length} tone={weakEvidenceSessions.length ? "amber" : "success"} href="/archive-progress" />
+          <StatCard label="Sessions Not Reviewed" value={sessionsNotReviewed.length} tone={sessionsNotReviewed.length ? "amber" : "success"} href="/archive-progress" />
+          <StatCard label="Pitch-Ready Blockers" value={pitchReadyBlockers} tone={pitchReadyBlockers ? "danger" : "success"} href="/songs" />
         </div>
-      </SectionCard>
-      </div>
-      <div className="section">
-      <SectionCard title="Health Snapshot">
-        <div className="grid cards">
-          <StatCard label="Total Sessions" value={sessions.length} tone="neutral" />
-          <StatCard label="Total Songs / Works" value={songs.length} tone="neutral" />
-          <StatCard label="Cut / Released" value={cutReleased} tone={cutReleased > 0 ? "success" : "neutral"} />
-          <StatCard label="Reviewed (All Time)" value={totalReviewedAll} tone="success" />
-        </div>
-      </SectionCard>
-      </div>
-      <div className="section">
-      <SectionCard title="Archive Review Snapshot" actions={<Link className="button primary" href="/archive-progress">Open Archive Review</Link>}>
-        <div className="grid cards">
-          <StatCard label="Current Active Year" value={currentYear} />
-          <StatCard label="Latest Audited Date" value={latestAudited || <span className="helper">Not set</span>} />
-          <StatCard label="Sessions Needing Evidence" value={sessionsNeedingEvidence} />
-          <StatCard label="Total Sessions In Library" value={sessions.length} />
-          <StatCard label="Reviewed (All Time)" value={totalReviewedAll} />
-          <StatCard label="Remaining (All Time)" value={totalRemainingAll} />
+        <div className="rowActions compact" style={{ marginTop: ".65rem", flexWrap: "wrap" }}>
+          {sessionsNotReviewed.slice(0, 4).map((s) => <Link key={s.id} className="button compact" href={`/sessions/${s.id}`}>{s.date} {s.title || "Untitled"}</Link>)}
         </div>
       </SectionCard>
       </div>
       <div className="section">
-      <SectionCard title="Quick Links"><div className="rowActions"><Link className="button" href="/songs?filter=no-bounce">No Bounce</Link><Link className="button" href="/songs?filter=no-lyrics">No Lyrics</Link><Link className="button" href="/songs?filter=disputed">Disputed</Link><Link className="button" href="/exports">Exports</Link></div></SectionCard>
+      <SectionCard title="Momentum" actions={<Link className="button" href="/archive-progress">Continue Review</Link>}>
+        <div className="grid cards">
+          <StatCard label="Reviewed This Year" value={reviewedThisYear} tone={reviewedThisYear ? "success" : "neutral"} />
+          <StatCard label="Reviewed This Month" value={reviewedThisMonth} tone={reviewedThisMonth ? "success" : "neutral"} />
+          <StatCard label="Works Logged This Year" value={worksLoggedThisYear} tone={worksLoggedThisYear ? "success" : "neutral"} />
+          <StatCard label="Archive Completeness %" value={archiveCompletenessPct} tone={archiveCompletenessPct >= 70 ? "success" : archiveCompletenessPct >= 40 ? "amber" : "danger"} />
+          <StatCard label="Pitch-Ready Songs" value={pitchReadyCount} tone={pitchReadyCount ? "success" : "neutral"} href="/songs" />
+          <StatCard label="Recent Playlist Responses" value={responseCount} tone={responseCount ? "neutral" : "success"} href="/playlists" />
+        </div>
+        <p className="helper" style={{ marginTop: ".6rem" }}>Last review completed: {latestAudited || "Not set"} · Reviewed this week: {reviewedThisWeek} · Remaining this year: {Math.max(yearSessions.length - reviewedThisYear, 0)}</p>
+      </SectionCard>
       </div>
       <div className="section">
-      <SectionCard title="Upcoming Follow-ups">
-        {upcoming.length === 0 ? <EmptyState title="No follow-ups yet" hint="Add action items to track next steps." /> : (
-          <div className="tableWrap"><table><thead><tr><th>Due Date</th><th>Priority</th><th>Task</th><th>Status</th><th>Actions</th></tr></thead><tbody>{upcoming.map((a)=><tr key={a.id}><td>{a.dueDate}</td><td>{a.priority}</td><td>{a.task}</td><td>{a.status}</td><td><Link className="button compact" href="/actions">Open</Link></td></tr>)}</tbody></table></div>
+      <SectionCard title="Follow-up" actions={<Link className="button primary" href="/actions">Open Actions</Link>}>
+        {activeActions.length === 0 ? <EmptyState title="No active follow-ups" hint="You are clear right now." /> : (
+          <div className="grid cards">
+            <StatCard label="Overdue" value={overdueActions.length} tone={overdueActions.length ? "danger" : "success"} href="/actions" />
+            <StatCard label="Due In 7 Days" value={dueSoonActions.length} tone={dueSoonActions.length ? "amber" : "success"} href="/actions" />
+            <StatCard label="Open Actions" value={activeActions.length} tone={activeActions.length ? "amber" : "success"} href="/actions" />
+            <StatCard label="Hold/Interested To Reply" value={holdInterestedResponses.length} tone={holdInterestedResponses.length ? "amber" : "success"} href="/playlists" />
+          </div>
         )}
-      </SectionCard>
-      </div>
-
-      <div className="section">
-      <SectionCard title="Actionable Warnings">
-        <details id="warn-no-songs">
-          <summary><span style={{ color: "#8a5f2b", fontWeight: 600 }}>Sessions with 0 Songs ({sessionsWithNoSongs})</span></summary>
-          <div className="tableWrap"><table><thead><tr><th>Date</th><th>Session</th><th>Open</th></tr></thead><tbody>{sessionsWithNoSongs === 0 ? <tr><td colSpan={3} className="helper">None</td></tr> : sessions.filter((se) => songs.every((song) => song.sessionId !== se.id)).map((se) => <tr key={se.id}><td>{se.date}</td><td>{se.title || "Untitled Session"}</td><td><Link className="button compact" href={`/sessions/${se.id}`}>Workspace</Link></td></tr>)}</tbody></table></div>
-        </details>
-        <details id="warn-session-no-bounce" style={{ marginTop: ".6rem" }}>
-          <summary><span style={{ color: "#8a5f2b", fontWeight: 600 }}>Sessions with 0 Bounce ({sessionsWithNoBounce})</span></summary>
-          <div className="tableWrap"><table><thead><tr><th>Date</th><th>Session</th><th>Open</th></tr></thead><tbody>{sessionsWithNoBounce === 0 ? <tr><td colSpan={3} className="helper">None</td></tr> : sessions.filter((se) => { const sessionSongs = songs.filter((song) => song.sessionId === se.id); if (sessionSongs.length === 0) return true; return sessionSongs.every((song) => !hasBounceForSong(song.id, song.bounceLink)); }).map((se) => <tr key={se.id}><td>{se.date}</td><td>{se.title || "Untitled Session"}</td><td><Link className="button compact" href={`/sessions/${se.id}`}>Workspace</Link></td></tr>)}</tbody></table></div>
-        </details>
-        <details id="warn-missing-bounce" style={{ marginTop: ".6rem" }}>
-          <summary><span style={{ color: "#8a3d3d", fontWeight: 600 }}>Missing Bounce ({missingBounceSongs.length})</span></summary>
-          <div className="tableWrap"><table><thead><tr><th>Song</th><th>Session</th><th>Status</th><th>Open</th></tr></thead><tbody>{missingBounceSongs.length === 0 ? <tr><td colSpan={4} className="helper">None</td></tr> : missingBounceSongs.map((s) => { const se = sessions.find((x) => x.id === s.sessionId); return <tr key={s.id}><td>{s.title || "Untitled Song"}</td><td>{se ? `${se.date} - ${se.title || "Untitled Session"}` : "Unlinked"}</td><td>{s.status}</td><td><Link className="button compact" href={`/songs/${s.id}`}>Song</Link></td></tr>; })}</tbody></table></div>
-        </details>
-        <details id="warn-missing-lyrics" style={{ marginTop: ".6rem" }}>
-          <summary><span style={{ color: "#8a5f2b", fontWeight: 600 }}>Missing Lyrics ({missingLyricsSongs.length})</span></summary>
-          <div className="tableWrap"><table><thead><tr><th>Song</th><th>Session</th><th>Status</th><th>Open</th></tr></thead><tbody>{missingLyricsSongs.length === 0 ? <tr><td colSpan={4} className="helper">None</td></tr> : missingLyricsSongs.map((s) => { const se = sessions.find((x) => x.id === s.sessionId); return <tr key={s.id}><td>{s.title || "Untitled Song"}</td><td>{se ? `${se.date} - ${se.title || "Untitled Session"}` : "Unlinked"}</td><td>{s.status}</td><td><Link className="button compact" href={`/songs/${s.id}`}>Song</Link></td></tr>; })}</tbody></table></div>
-        </details>
-        <details id="warn-weak-partial" style={{ marginTop: ".6rem" }}>
-          <summary><span style={{ color: "#8a5f2b", fontWeight: 600 }}>Weak/Partial Evidence Sessions ({weakPartialSessions.length})</span></summary>
-          <div className="tableWrap"><table><thead><tr><th>Date</th><th>Session</th><th>Evidence</th><th>Open</th></tr></thead><tbody>{weakPartialSessions.length === 0 ? <tr><td colSpan={4} className="helper">None</td></tr> : weakPartialSessions.map((s) => <tr key={s.id}><td>{s.date}</td><td>{s.title || "Untitled Session"}</td><td>{s.evidence_strength || "Not set"}</td><td><Link className="button compact" href={`/sessions/${s.id}`}>Workspace</Link></td></tr>)}</tbody></table></div>
-        </details>
-        <details id="warn-disputed" style={{ marginTop: ".6rem" }}>
-          <summary><span style={{ color: "#8a3d3d", fontWeight: 600 }}>Disputed Songs ({disputedSongs.length})</span></summary>
-          <div className="tableWrap"><table><thead><tr><th>Song</th><th>Session</th><th>Open</th></tr></thead><tbody>{disputedSongs.length === 0 ? <tr><td colSpan={3} className="helper">None</td></tr> : disputedSongs.map((s) => { const se = sessions.find((x) => x.id === s.sessionId); return <tr key={s.id}><td>{s.title || "Untitled Song"}</td><td>{se ? `${se.date} - ${se.title || "Untitled Session"}` : "Unlinked"}</td><td><Link className="button compact" href={`/songs/${s.id}`}>Song</Link></td></tr>; })}</tbody></table></div>
-        </details>
-        <details id="warn-playlist-responses" style={{ marginTop: ".6rem" }}>
-          <summary><span style={{ color: "#5f6b74", fontWeight: 600 }}>Playlist Responses ({responseCount})</span></summary>
-          <div className="tableWrap"><table><thead><tr><th>When</th><th>Playlist</th><th>Song</th><th>Response</th><th>Sender</th><th>Open</th></tr></thead><tbody>{playlistResponses.length === 0 ? <tr><td colSpan={6} className="helper">No responses yet.</td></tr> : playlistResponses.map((r) => { const tr = r.playlist_track_id ? trackById.get(r.playlist_track_id) : undefined; const song = tr ? songById.get(tr.song_work_id) : undefined; return <tr key={r.id}><td>{new Date(r.created_at).toLocaleDateString()}</td><td>{playlistTitleById.get(r.playlist_id) || "Playlist"}</td><td>{song?.title || "Unknown song"}</td><td>{r.response_type}</td><td>{r.sender_name || <span className="helper">Unknown</span>}</td><td>{r.playlist_id ? <Link className="button compact" href={`/playlists/${r.playlist_id}`}>Playlist</Link> : <span className="helper">-</span>}</td></tr>; })}</tbody></table></div>
-        </details>
+        <div className="rowActions compact" style={{ marginTop: ".65rem", flexWrap: "wrap" }}>
+          {upcoming.slice(0, 6).map((a) => <Link key={a.id} className="button compact" href="/actions">{a.dueDate || "No date"} · {a.task || "Untitled task"}</Link>)}
+        </div>
       </SectionCard>
       </div>
 
@@ -232,16 +240,6 @@ export default function Page() {
       </SectionCard>
       </div>
 
-      <div className="section">
-      <SectionCard title="Recommended Next Features">
-        <ul style={{ paddingLeft: "1.2rem" }}>
-          <li>Add batch evidence tools (bulk add bounce/lyrics across selected songs).</li>
-          <li>Add dashboard saved views by period (Current month, Quarter, Year).</li>
-          <li>Add action reminders (due-soon digest with one-click Done).</li>
-          <li>Add playlist response follow-up templates to create actions automatically.</li>
-        </ul>
-      </SectionCard>
-      </div>
     </div>
   );
 }

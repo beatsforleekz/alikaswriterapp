@@ -10,6 +10,7 @@ export default function HelpPage() {
 
       <SectionCard title="What this app is for"><p>This app tracks writing sessions, songs/works, evidence links, pitches, cuts, registrations, disputes, and follow-ups.</p></SectionCard>
       <SectionCard title="Sessions vs Songs/Works"><p>Sessions are the diary/calendar layer. Songs/works are where copyright/admin tracking lives. Session detail pages are the main enrichment workspace. Edits made there automatically update Songs/Works records, and evidence entered once is reused everywhere. Imported calendar events may start empty and should be enriched later.</p><p className="helper" style={{ marginTop: ".5rem" }}>Writers are saved as reusable records. In Session Workspace, roles can be selected or custom typed, and blank splits are assumed equal temporarily.</p></SectionCard>
+      <SectionCard title="Shared Evidence Hub + Writer/Split Panel"><p>Archive Review, Session Workspace, and Song Detail now use a shared Evidence Hub and shared Writer/Split patterns for consistency.</p><ul style={{ paddingLeft: "1.2rem", marginTop: ".5rem" }}><li>Evidence labels/types are normalised consistently (Bounce, Lyrics, Apple Note, etc.).</li><li>Duplicate evidence links for the same song/type are prevented where add flows are available.</li><li>Writer/split management uses the same add/edit/delete interaction style across pages.</li></ul></SectionCard>
       <SectionCard title="How to import your calendar"><p>The app currently supports calendar file import (.ics), not live Google sync yet. Manual sessions can be added from onboarding or from the Sessions page.</p><p className="helper" style={{ marginTop: ".5rem" }}>A shared Google calendar is embedded directly inside Sessions as a temporary reference while logging records manually.</p><p className="helper" style={{ marginTop: ".5rem" }}>Date fields use calendar picker inputs for faster and more accurate entry.</p></SectionCard>
 
       <SectionCard title="How to export from Google Calendar">
@@ -46,8 +47,18 @@ export default function HelpPage() {
         <p className="helper" style={{ marginTop: ".4rem" }}><strong>Apple Note Exists</strong> is useful even without a share link because note existence/history can still support evidence context.</p>
       </SectionCard>
       <SectionCard title="Recommended Backfill Workflow"><ul style={{ paddingLeft: "1.2rem" }}><li>Start recent-first.</li><li>Work backwards by year.</li><li>Prioritise commercially relevant songs first.</li><li>Recent sessions are easier to recover.</li><li>Calendar import can later fill gaps.</li><li>Use the Archive Review tool to process sessions chronologically by period.</li></ul></SectionCard>
+      <SectionCard title="Recommended Next Features">
+        <ul style={{ paddingLeft: "1.2rem" }}>
+          <li>Add batch evidence tools (bulk add bounce/lyrics across selected songs).</li>
+          <li>Add dashboard saved views by period (Current month, Quarter, Year).</li>
+          <li>Add action reminders (due-soon digest with one-click Done).</li>
+          <li>Add playlist response follow-up templates to create actions automatically.</li>
+        </ul>
+      </SectionCard>
 
       <SectionCard title="How to conduct an Archive Review"><ul style={{ paddingLeft: "1.2rem" }}><li>Open Archive Review and choose year/date range/filter.</li><li>Click Start Review to move through sessions one by one.</li><li>Use Back/Next/Mark Reviewed &amp; Next/Save Progress to keep your place.</li><li>Use the checklist/warnings to identify missing bounce, lyrics, writers, splits, and supporting links.</li><li>Add follow-up actions for anything missing.</li><li>Open full Session Workspace whenever deeper edits are needed.</li></ul><p className="helper" style={{ marginTop: ".6rem" }}>Reviewed means checked, not necessarily complete. Missing evidence can remain if follow-up actions are logged.</p><p className="helper" style={{ marginTop: ".4rem" }}>Evidence Strength indicates how defensible/admin-ready the archive currently is.</p></SectionCard>
+      <SectionCard title="Archive Review Focus Mode"><p>Focus Mode is a simplified review view designed for fast processing and lower distraction.</p><ul style={{ paddingLeft: "1.2rem", marginTop: ".5rem" }}><li>Shows core review fields, blockers, and next actions first.</li><li>Hides some secondary editing sections so the page feels lighter.</li><li>Keeps review navigation/actions visible so you can continue session-by-session.</li></ul><p className="helper" style={{ marginTop: ".5rem" }}>Use Focus Mode when you want to move quickly through reviews, then switch it off for full detail editing.</p></SectionCard>
+      <SectionCard title="Readiness Pipeline"><p>Dashboard and Archive Review include readiness cues to show what needs next action:</p><ul style={{ paddingLeft: "1.2rem", marginTop: ".5rem" }}><li>Ready to Pitch</li><li>Needs Bounce</li><li>Needs Lyrics</li><li>Needs Writers/Splits</li><li>Needs Follow-up</li></ul><p className="helper" style={{ marginTop: ".5rem" }}>Use these as practical next-action prompts, not rigid grades.</p></SectionCard>
 
       <SectionCard title="How to connect Supabase">
         <ol style={{ paddingLeft: "1.2rem" }}>

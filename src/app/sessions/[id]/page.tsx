@@ -82,6 +82,7 @@ export default function SessionDetailPage() {
   const [reviewHistory, setReviewHistory] = useState<ReviewHistoryRow[]>([]);
   const [overviewSaveState, setOverviewSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [overviewLastSavedAt, setOverviewLastSavedAt] = useState("");
+  const [evidenceSaveState, setEvidenceSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const load = async () => {
     const { data: sData, error: sErr } = await supabase.from("sessions").select("*").eq("id", params.id).single();
@@ -360,10 +361,23 @@ export default function SessionDetailPage() {
 
   const addAsset = async () => {
     if (!assetSongId || !assetUrl.trim()) return;
+    const normalizedType = normalizeEvidenceType(assetType);
+    const normalizedUrl = assetUrl.trim();
+    const exists = assets.some((a) =>
+      String(a.song_id) === String(assetSongId)
+      && normalizeEvidenceType(a.type || "") === normalizedType
+      && String(a.url || "").trim() === normalizedUrl,
+    );
+    if (exists) {
+      setErrorMsg("That evidence link is already added for this song.");
+      return;
+    }
+    setEvidenceSaveState("saving");
     const { error } = await supabase.from("asset_links").insert({ song_id: assetSongId, type: assetType, url: assetUrl });
     if (error) {
       logSupabaseError("Failed to add asset from session detail", error);
       setErrorMsg(supabaseUserMessage("Could not add asset/evidence", error));
+      setEvidenceSaveState("error");
       return;
     }
 
@@ -384,6 +398,8 @@ export default function SessionDetailPage() {
     await maybePromoteSongToAssetsFiled(assetSongId);
 
     setAssetUrl("");
+    setEvidenceSaveState("saved");
+    window.setTimeout(() => setEvidenceSaveState("idle"), 1200);
     await load();
   };
 
@@ -945,6 +961,7 @@ export default function SessionDetailPage() {
           onEditType={(id, nextType) => updateAsset(id, { type: nextType })}
           onEditUrl={(id, nextUrl) => updateAsset(id, { url: nextUrl })}
         />
+        <p className="helper" style={{ marginTop: ".5rem" }}>{evidenceSaveState === "saving" ? "Saving evidence..." : evidenceSaveState === "saved" ? "Evidence saved" : evidenceSaveState === "error" ? "Could not save evidence" : ""}</p>
       </SectionCard>
 
       <SectionCard title="Actions / Follow-ups" actions={<div id="add-action" className="rowActions compact"><input value={newActionTask} onChange={(e)=>setNewActionTask(e.target.value)} placeholder="Follow-up task" style={{ minWidth: 220 }} /><input type="date" value={newActionDate} onChange={(e)=>setNewActionDate(e.target.value)} style={{ maxWidth: 170 }} /><button className="button primary compact" onClick={addAction}>Add Follow-up</button></div>}>

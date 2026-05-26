@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState } from "react";
 
 const links = [
   ["/", "Dashboard"],
@@ -17,18 +18,35 @@ const links = [
 
 export default function Nav() {
   const pathname = usePathname();
+  const [mobileOpen, setMobileOpen] = useState(false);
   if (pathname.startsWith("/pitch/")) return null;
   return (
     <aside className="sidebar">
-      <div className="brandWrap">
-        <p className="brandScript">Alika</p>
-        <p className="brandMain">Alika&apos;s Writing App</p>
+      <div className="brandWrap navTopBar">
+        <div>
+          <p className="brandScript">Alika</p>
+          <p className="brandMain">Alika&apos;s Writing App</p>
+        </div>
+        <button
+          type="button"
+          className="navToggle"
+          aria-label={mobileOpen ? "Close menu" : "Open menu"}
+          aria-expanded={mobileOpen}
+          onClick={() => setMobileOpen((v) => !v)}
+        >
+          ☰
+        </button>
       </div>
-      <nav className="sideNav">
+      <nav className={`sideNav ${mobileOpen ? "open" : "collapsed"}`}>
         {links.map(([href, label]) => {
           const active = href === "/" ? pathname === "/" : pathname.startsWith(href);
           return (
-            <Link key={href} href={href} className={`sideLink ${active ? "active" : ""}`}>
+            <Link
+              key={href}
+              href={href}
+              className={`sideLink ${active ? "active" : ""}`}
+              onClick={() => setMobileOpen(false)}
+            >
               {label}
             </Link>
           );

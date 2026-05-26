@@ -24,6 +24,7 @@ a { color: inherit; text-decoration: none; }
 .sideLink { padding: .62rem .72rem; border-radius: 12px; color: #d9c7b9; font-weight: 500; }
 .sideLink:hover { background: rgba(201,169,139,.16); }
 .sideLink.active { background: linear-gradient(90deg, rgba(183,144,82,.35), rgba(201,169,139,.1)); color: #fff4e8; }
+.navToggle { display: none; }
 
 .mainArea { padding: 1.2rem 1.2rem 2rem; }
 .contentWrap { max-width: 1280px; margin: 0 auto; }
@@ -162,6 +163,23 @@ tr:hover td { background: #f8f2ec; }
 @media (max-width: 980px) {
   .appShell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; }
+  .navTopBar { display: flex; align-items: center; justify-content: space-between; gap: .8rem; margin-bottom: .4rem; }
+  .navToggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 239, 225, .35);
+    background: rgba(255, 239, 225, .14);
+    color: #fff4e8;
+    font-size: 1.2rem;
+    line-height: 1;
+    padding: 0;
+  }
+  .sideNav.collapsed { display: none; }
+  .sideNav.open { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); }
   .sideNav { grid-template-columns: repeat(2, minmax(0,1fr)); }
   .mainArea { padding: 1rem; }
   .kv { grid-template-columns: 1fr; }
