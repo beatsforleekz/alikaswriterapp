@@ -135,6 +135,7 @@ export default function ArchiveProgressPage() {
   const [followUpDue, setFollowUpDue] = useState("");
   const [followUpStatus, setFollowUpStatus] = useState("Open");
   const [newSongTitle, setNewSongTitle] = useState("");
+  const [songDrafts, setSongDrafts] = useState<Record<string, { title: string; bounce: string; lyrics: string }>>({});
   const [newAssetType, setNewAssetType] = useState("other");
   const [newAssetSongId, setNewAssetSongId] = useState("");
   const [newAssetUrl, setNewAssetUrl] = useState("");
@@ -198,6 +199,14 @@ export default function ArchiveProgressPage() {
   const currentSplits = useMemo(() => splits.filter((sp) => currentSongIds.has(String(sp.song_id))), [splits, currentSongIds]);
   const currentActions = useMemo(() => actions.filter((a) => String(a.session_id || "") === String(current?.id || "")), [actions, current?.id]);
   const evidence = useMemo(() => calcEvidence(current, currentSongs, currentAssets, currentSplits, currentActions), [current, currentSongs, currentAssets, currentSplits, currentActions]);
+
+  useEffect(() => {
+    const next: Record<string, { title: string; bounce: string; lyrics: string }> = {};
+    currentSongs.forEach((s) => {
+      next[s.id] = { title: s.title || "", bounce: s.bounce_link || "", lyrics: s.lyrics_link || "" };
+    });
+    setSongDrafts(next);
+  }, [currentSongs]);
 
   const reviewedCount = useMemo(() => filteredSessions.filter((s) => s.archive_reviewed).length, [filteredSessions]);
   const remainingCount = Math.max(filteredSessions.length - reviewedCount, 0);
@@ -303,6 +312,19 @@ export default function ArchiveProgressPage() {
     }
     setNewSongTitle("");
     await load();
+  };
+
+  const deleteSong = async (songId: string) => {
+    if (!window.confirm("Delete this song/work from the session?")) return;
+    const { error } = await supabase.from("song_works").delete().eq("id", songId);
+    if (error) {
+      logSupabaseError("Failed to delete song/work in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not delete song/work", error));
+      return;
+    }
+    await load();
+    setSaveMsg("Song/work deleted.");
+    window.setTimeout(() => setSaveMsg(""), 1300);
   };
 
   const addAsset = async () => {
@@ -450,6 +472,29 @@ export default function ArchiveProgressPage() {
     await load();
   };
 
+  const editActionTask = async (action: ActionLite) => {
+    const nextTask = window.prompt("Update follow-up task", action.task || "");
+    if (nextTask === null) return;
+    const { error } = await supabase.from("action_items").update({ task: nextTask }).eq("id", action.id);
+    if (error) {
+      logSupabaseError("Failed to edit action task in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not update follow-up", error));
+      return;
+    }
+    await load();
+  };
+
+  const deleteAction = async (actionId: string) => {
+    if (!window.confirm("Delete this follow-up action?")) return;
+    const { error } = await supabase.from("action_items").delete().eq("id", actionId);
+    if (error) {
+      logSupabaseError("Failed to delete follow-up action in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not delete follow-up", error));
+      return;
+    }
+    await load();
+  };
+
   const completionStats = useMemo(() => {
     const sessionIds = new Set(filteredSessions.map((s) => s.id));
     const scopedSongs = songs.filter((s) => sessionIds.has(String(s.session_id || "")));
@@ -550,10 +595,10 @@ export default function ArchiveProgressPage() {
                     <tbody>
                       {currentSongs.map((song) => (
                         <tr key={song.id}>
-                          <td><input value={song.title || ""} onChange={async (e) => updateSongField(song.id, { title: e.target.value })} /></td>
-                          <td><input value={song.bounce_link || ""} placeholder="https://..." onChange={async (e) => updateSongField(song.id, { bounce_link: e.target.value || null })} /></td>
-                          <td><input value={song.lyrics_link || ""} placeholder="https://..." onChange={async (e) => updateSongField(song.id, { lyrics_link: e.target.value || null })} /></td>
-                          <td><Link className="button compact" href={`/songs/${song.id}`}>Song Detail</Link></td>
+                          <td><input value={songDrafts[song.id]?.title ?? ""} onChange={(e) => setSongDrafts((p) => ({ ...p, [song.id]: { ...(p[song.id] || { title: "", bounce: "", lyrics: "" }), title: e.target.value } }))} /></td>
+                          <td><input value={songDrafts[song.id]?.bounce ?? ""} placeholder="https://..." onChange={(e) => setSongDrafts((p) => ({ ...p, [song.id]: { ...(p[song.id] || { title: "", bounce: "", lyrics: "" }), bounce: e.target.value } }))} /></td>
+                          <td><input value={songDrafts[song.id]?.lyrics ?? ""} placeholder="https://..." onChange={(e) => setSongDrafts((p) => ({ ...p, [song.id]: { ...(p[song.id] || { title: "", bounce: "", lyrics: "" }), lyrics: e.target.value } }))} /></td>
+                          <td><div className="rowActions compact"><button className="button compact" onClick={() => updateSongField(song.id, { title: songDrafts[song.id]?.title ?? "", bounce_link: (songDrafts[song.id]?.bounce || "").trim() || null, lyrics_link: (songDrafts[song.id]?.lyrics || "").trim() || null })}>Save</button><button className="button compact" onClick={() => deleteSong(song.id)}>Delete</button><Link className="button compact" href={`/songs/${song.id}`}>Song Detail</Link></div></td>
                         </tr>
                       ))}
                     </tbody>
@@ -582,7 +627,7 @@ export default function ArchiveProgressPage() {
             </SectionCard>
 
             <SectionCard title="Follow-up Actions">
-              {currentActions.length ? <div className="tableWrap"><table><thead><tr><th>Due</th><th>Task</th><th>Status</th></tr></thead><tbody>{currentActions.map((a) => <tr key={a.id}><td>{a.due_date || <span className="helper">No date</span>}</td><td>{a.task}</td><td><select value={a.status} onChange={(e) => updateActionStatus(a.id, e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select></td></tr>)}</tbody></table></div> : <p className="helper">No follow-ups yet.</p>}
+              {currentActions.length ? <div className="tableWrap"><table><thead><tr><th>Due</th><th>Task</th><th>Status</th><th>Actions</th></tr></thead><tbody>{currentActions.map((a) => <tr key={a.id}><td>{a.due_date || <span className="helper">No date</span>}</td><td>{a.task}</td><td><select value={a.status} onChange={(e) => updateActionStatus(a.id, e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select></td><td><div className="rowActions compact"><button className="button compact" onClick={() => editActionTask(a)}>Edit</button><button className="button compact" onClick={() => deleteAction(a.id)}>Delete</button></div></td></tr>)}</tbody></table></div> : <p className="helper">No follow-ups yet.</p>}
               <div className="rowActions compact" style={{ marginTop: ".5rem" }}>
                 <input value={followUpTask} onChange={(e) => setFollowUpTask(e.target.value)} placeholder="Add follow-up task" style={{ minWidth: 240 }} />
                 <input type="date" value={followUpDue} onChange={(e) => setFollowUpDue(e.target.value)} style={{ maxWidth: 180 }} />
