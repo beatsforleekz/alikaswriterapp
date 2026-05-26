@@ -55,6 +55,18 @@ export default function SongsPage() {
   const [tagFilter, setTagFilter] = useState("all");
   const [errorMsg, setErrorMsg] = useState("");
 
+  const deleteSong = async (id: string) => {
+    if (!window.confirm("Delete this song/work?")) return;
+    setErrorMsg("");
+    const { error } = await supabase.from("song_works").delete().eq("id", id);
+    if (error) {
+      logSupabaseError("Failed to delete song from songs list", error);
+      setErrorMsg(supabaseUserMessage("Could not delete song/work", error));
+      return;
+    }
+    setRows((prev) => prev.filter((r) => r.id !== id));
+  };
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const incomingFilter = params.get("filter");
@@ -200,7 +212,7 @@ export default function SongsPage() {
                       <td>{hasLyrics ? "Yes" : <span className="helper">Missing</span>}</td>
                       <td>{writerNames.length ? writerNames.join(", ") : <span className="helper">No writers</span>}</td>
                       <td>{parent ? `${parent.date} - ${parent.title || "Untitled Session"}` : <span className="helper">Unlinked</span>}</td>
-                      <td><div className="rowActions compact">{parent ? <Link className="button compact" href={`/sessions/${parent.id}`}>Open Session Workspace</Link> : <span className="helper">No session workspace</span>}</div></td>
+                      <td><div className="rowActions compact"><Link className="button compact" href={`/songs/${s.id}`}>Edit</Link>{parent ? <Link className="button compact" href={`/sessions/${parent.id}`}>Session</Link> : <span className="helper">No session</span>}<button className="button compact" onClick={() => deleteSong(s.id)}>Delete</button></div></td>
                     </tr>
                   );
                 })}

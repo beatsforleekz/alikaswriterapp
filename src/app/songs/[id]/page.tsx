@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { mapSong } from "@/lib/mappers";
 import PageHeader from "@/components/ui/PageHeader";
@@ -13,6 +13,7 @@ import { isAllowedPitchAudio, uploadPitchAudio, removePitchAudio, getPlayableAud
 
 export default function SongDetail() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [song, setSong] = useState<ReturnType<typeof mapSong> | null>(null);
   const [sessionRef, setSessionRef] = useState<{ id: string; title: string; date: string } | null>(null);
   const [assets, setAssets] = useState<Array<{ id: string; type: string; url?: string | null }>>([]);
@@ -22,6 +23,11 @@ export default function SongDetail() {
   const [tagOptions, setTagOptions] = useState<Array<{ id: string; name: string }>>([]);
   const [songTags, setSongTags] = useState<Array<{ id: string; name: string; tag_id: string }>>([]);
   const [tagInput, setTagInput] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+  const [statusDraft, setStatusDraft] = useState("");
+  const [notesDraft, setNotesDraft] = useState("");
+  const [bounceDraft, setBounceDraft] = useState("");
+  const [lyricsDraft, setLyricsDraft] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -33,6 +39,11 @@ export default function SongDetail() {
       }
       const mapped = mapSong(songData as Record<string, unknown>);
       setSong(mapped);
+      setTitleDraft(mapped.title || "");
+      setStatusDraft(mapped.status || "Started");
+      setNotesDraft(mapped.notes || "");
+      setBounceDraft(mapped.bounceLink || "");
+      setLyricsDraft(mapped.lyricsLink || "");
       setAudioUrl(await getPlayableAudioUrl(mapped.audioStoragePath));
 
       if (mapped.sessionId) {
@@ -101,17 +112,58 @@ export default function SongDetail() {
     setSongTags((prev) => prev.filter((t) => t.id !== linkId));
   };
 
+  const saveSongCore = async () => {
+    const { error: songErr } = await supabase
+      .from("song_works")
+      .update({
+        title: titleDraft.trim(),
+        status: statusDraft,
+        notes: notesDraft.trim() || null,
+        bounce_link: bounceDraft.trim() || null,
+        lyrics_link: lyricsDraft.trim() || null,
+      })
+      .eq("id", song.id);
+    if (songErr) {
+      logSupabaseError("Failed to save song core from library view", songErr);
+      setError(supabaseUserMessage("Could not save song/work changes", songErr));
+      return;
+    }
+    setSong((prev) => prev ? {
+      ...prev,
+      title: titleDraft.trim(),
+      status: statusDraft as typeof prev.status,
+      notes: notesDraft.trim() || undefined,
+      bounceLink: bounceDraft.trim() || undefined,
+      lyricsLink: lyricsDraft.trim() || undefined,
+    } : prev);
+  };
+
+  const deleteSong = async () => {
+    if (!window.confirm("Delete this song/work?")) return;
+    const { error: delErr } = await supabase.from("song_works").delete().eq("id", song.id);
+    if (delErr) {
+      logSupabaseError("Failed to delete song/work from library view", delErr);
+      setError(supabaseUserMessage("Could not delete song/work", delErr));
+      return;
+    }
+    router.push("/songs");
+  };
+
   return (
     <div>
-      <PageHeader title={song.title || "Untitled Song"} subtitle="Library view. Manage this song from its Session workspace." actions={sessionRef ? <Link className="button primary" href={`/sessions/${sessionRef.id}`}>Open Session Workspace</Link> : undefined} />
+      <PageHeader title={song.title || "Untitled Song"} subtitle="Library view. Manage this song from its Session workspace." actions={<div className="rowActions">{sessionRef ? <Link className="button" href={`/sessions/${sessionRef.id}`}>Open Session Workspace</Link> : null}<button className="button primary" onClick={saveSongCore}>Save Changes</button><button className="button" onClick={deleteSong}>Delete Song/Work</button></div>} />
       {error ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{error}</p> : null}
 
       <SectionCard title="Overview">
         <div className="kv">
-          <dt>Status</dt><dd><StatusBadge label={song.status} /></dd>
+          <dt>Title</dt><dd><input value={titleDraft} onChange={(e) => setTitleDraft(e.target.value)} /></dd>
+          <dt>Status</dt><dd><select value={statusDraft} onChange={(e) => setStatusDraft(e.target.value)}><option>Started</option><option>Written</option><option>Bounce In</option><option>Assets Filed</option><option>Pitched</option><option>On Hold</option><option>Cut</option><option>Approved</option><option>Released</option><option>Disputed</option><option>Registered</option><option>Complete</option></select></dd>
+          <dt>Current Status</dt><dd><StatusBadge label={song.status} /></dd>
           <dt>Tags</dt><dd><div className="rowActions compact"><input list="song-tag-options-detail" value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="Type or reuse tag" /><button className="button compact" type="button" onClick={addTag}>Add Tag</button></div><datalist id="song-tag-options-detail">{tagOptions.map((tag) => <option key={tag.id} value={tag.name} />)}</datalist><div className="rowActions compact" style={{ marginTop: ".4rem" }}>{songTags.length ? songTags.map((tag) => <button key={tag.id} className="button compact" type="button" onClick={() => removeTag(tag.id)}>{tag.name} ✕</button>) : <span className="helper">No tags</span>}</div></dd>
           <dt>Session</dt><dd>{sessionRef ? <Link href={`/sessions/${sessionRef.id}`}>{sessionRef.date} - {sessionRef.title || "Untitled Session"}</Link> : <span className="helper">Unlinked session</span>}</dd>
-          <dt>Notes</dt><dd>{song.notes || <span className="helper">No notes</span>}</dd>
+          <dt>Bounce Link</dt><dd><input value={bounceDraft} onChange={(e) => setBounceDraft(e.target.value)} placeholder="https://..." /></dd>
+          <dt>Lyrics Link</dt><dd><input value={lyricsDraft} onChange={(e) => setLyricsDraft(e.target.value)} placeholder="https://..." /></dd>
+          <dt>Notes</dt><dd><textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="Song/work notes" /></dd>
         </div>
       </SectionCard>
 
