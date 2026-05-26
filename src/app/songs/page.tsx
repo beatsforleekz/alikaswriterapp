@@ -53,7 +53,7 @@ export default function SongsPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState("all");
-  const [sortBy, setSortBy] = useState<"az" | "date" | "recent">("recent");
+  const [sortBy, setSortBy] = useState<"az" | "za" | "date" | "recent" | "added">("recent");
   const [errorMsg, setErrorMsg] = useState("");
 
   const deleteSong = async (id: string) => {
@@ -129,9 +129,13 @@ export default function SongsPage() {
     const next = [...filtered];
     if (sortBy === "az") {
       next.sort((a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }));
+    } else if (sortBy === "za") {
+      next.sort((a, b) => (b.title || "").localeCompare(a.title || "", undefined, { sensitivity: "base" }));
     } else if (sortBy === "date") {
       const sessionDate = (song: SongWork) => sessions.find((s) => s.id === song.sessionId)?.date || "";
       next.sort((a, b) => sessionDate(a).localeCompare(sessionDate(b)));
+    } else if (sortBy === "added") {
+      next.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
     } else {
       const sessionDate = (song: SongWork) => sessions.find((s) => s.id === song.sessionId)?.date || "";
       next.sort((a, b) => sessionDate(b).localeCompare(sessionDate(a)));
@@ -202,10 +206,12 @@ export default function SongsPage() {
         <label>Search</label>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title, writer, status, tag" style={{ maxWidth: 280 }} />
         <label>Sort</label>
-        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "date" | "recent")} style={{ maxWidth: 180 }}>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "za" | "date" | "recent" | "added")} style={{ maxWidth: 200 }}>
           <option value="az">A-Z</option>
-          <option value="date">Date</option>
+          <option value="za">Z-A</option>
+          <option value="date">Date (Oldest)</option>
           <option value="recent">Most Recent</option>
+          <option value="added">Date Added</option>
         </select>
       </FilterBar>
 

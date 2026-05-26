@@ -136,7 +136,7 @@ export default function SessionsPage() {
   const [importMessage, setImportMessage] = useState("");
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [error, setError] = useState("");
-  const [sortBy, setSortBy] = useState<"az" | "date" | "recent">("recent");
+  const [sortBy, setSortBy] = useState<"az" | "za" | "date" | "recent" | "added">("recent");
   const initialized = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -227,8 +227,12 @@ export default function SessionsPage() {
     const next = [...rows];
     if (sortBy === "az") {
       next.sort((a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }));
+    } else if (sortBy === "za") {
+      next.sort((a, b) => (b.title || "").localeCompare(a.title || "", undefined, { sensitivity: "base" }));
     } else if (sortBy === "date") {
       next.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    } else if (sortBy === "added") {
+      next.sort((a, b) => (a.id || "").localeCompare(b.id || ""));
     } else {
       next.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     }
@@ -341,10 +345,12 @@ export default function SessionsPage() {
             {importMessage ? <p className="helper" style={{ marginBottom: ".7rem" }}>{importMessage}</p> : null}
             <div className="rowActions compact" style={{ marginBottom: ".6rem" }}>
               <label className="helper">Sort</label>
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "date" | "recent")} style={{ maxWidth: 180 }}>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "za" | "date" | "recent" | "added")} style={{ maxWidth: 200 }}>
                 <option value="az">A-Z</option>
-                <option value="date">Date</option>
+                <option value="za">Z-A</option>
+                <option value="date">Date (Oldest)</option>
                 <option value="recent">Most Recent</option>
+                <option value="added">Date Added</option>
               </select>
             </div>
             <p className="helper" style={{ marginBottom: ".6rem" }}>Archive Reviewed means you have checked this session for the key admin/evidence items you currently know about.</p>

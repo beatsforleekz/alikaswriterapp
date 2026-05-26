@@ -92,6 +92,8 @@ export default function SessionDetailPage() {
   const [audioUploadStateBySong, setAudioUploadStateBySong] = useState<Record<string, "idle" | "ready" | "uploading" | "saved" | "error">>({});
   const [audioUploadMsgBySong, setAudioUploadMsgBySong] = useState<Record<string, string>>({});
   const [reviewHistory, setReviewHistory] = useState<ReviewHistoryRow[]>([]);
+  const [overviewSaveState, setOverviewSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [overviewLastSavedAt, setOverviewLastSavedAt] = useState("");
 
   const load = async () => {
     const { data: sData, error: sErr } = await supabase.from("sessions").select("*").eq("id", params.id).single();
@@ -308,13 +310,19 @@ export default function SessionDetailPage() {
   if (!session) return <div className="helper">Session not found.</div>;
 
   const updateSession = async (key: keyof Session, value: string | boolean) => {
+    setOverviewSaveState("saving");
     setSession((s) => (s ? { ...s, [key]: value } : s));
     const colMap: Record<string, string> = { date: "date", title: "title", location: "location", source: "source", archive_reviewed: "archive_reviewed", archive_review_notes: "archive_review_notes", evidence_strength: "evidence_strength" };
     const { error } = await supabase.from("sessions").update({ [colMap[key]]: value }).eq("id", session.id);
     if (error) {
       logSupabaseError("Failed to update session detail", error);
       setErrorMsg(supabaseUserMessage("Could not update session", error));
+      setOverviewSaveState("error");
+      return;
     }
+    setOverviewSaveState("saved");
+    setOverviewLastSavedAt(new Date().toLocaleString());
+    window.setTimeout(() => setOverviewSaveState("idle"), 1200);
   };
 
   const saveStudio = async () => {
@@ -729,6 +737,9 @@ export default function SessionDetailPage() {
           <dt>Source</dt><dd>{editing ? <select value={session.source} onChange={(e)=>updateSession("source", e.target.value)}><option value="manual">manual</option><option value="calendar">calendar</option><option value="calendar_import">calendar_import</option></select> : session.source}</dd>
           <dt>Notes</dt><dd>{editing ? <textarea value={session.archive_review_notes || ""} onChange={(e)=>updateSession("archive_review_notes", e.target.value)} /> : (session.archive_review_notes || <span className="helper">Add notes</span>)}</dd>
         </div>
+        <p className="helper" style={{ marginTop: ".55rem" }}>
+          {overviewSaveState === "saving" ? "Saving..." : overviewSaveState === "saved" ? `Last saved ${overviewLastSavedAt}` : overviewSaveState === "error" ? "Could not save changes" : (overviewLastSavedAt ? `Last saved ${overviewLastSavedAt}` : "")}
+        </p>
       </SectionCard>
 
       <SectionCard title="Linked Songs / Works" actions={<div id="add-song" className="rowActions compact"><input value={newSongTitle} onChange={(e)=>setNewSongTitle(e.target.value)} placeholder="Song/work title" style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addSong}>Quick Add Song/Work</button></div>}>

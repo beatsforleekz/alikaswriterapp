@@ -28,9 +28,11 @@ export default function HelpPage() {
           <li>New tags become future suggestions automatically.</li>
           <li>Use tags for genre, vocal type, mood, pitch use, and workflow markers.</li>
           <li>Songs/Works search includes title, status, writers, and tags.</li>
+          <li>Songs/Works can be sorted by A-Z, Date (Oldest), or Most Recent.</li>
           <li>Filtered Songs/Works lists can be exported as CSV for catalogue/admin follow-up.</li>
         </ul>
       </SectionCard>
+      <SectionCard title="List sorting"><p>Sessions, Songs/Works, and Actions support consistent sorting controls: <strong>A-Z</strong>, <strong>Z-A</strong>, <strong>Date (Oldest)</strong>, <strong>Most Recent</strong>, and <strong>Date Added</strong>.</p></SectionCard>
       <SectionCard title="Evidence checklist basics"><p><strong>Required assets</strong></p><ul style={{ paddingLeft: "1.2rem" }}><li>Bounce link</li><li>Lyrics link</li></ul><p style={{ marginTop: "0.6rem" }}><strong>Optional assets</strong></p><ul style={{ paddingLeft: "1.2rem" }}><li>voice note link</li><li>Google Doc link</li><li>Apple Note reference/link</li><li>instrumental link</li><li>acapella link</li><li>Dropbox folder link</li><li>emails/messages</li><li>screenshots</li><li>session file/project link</li><li>other evidence</li></ul></SectionCard>
       <SectionCard title="Evidence Strength Levels">
         <ul style={{ paddingLeft: "1.2rem" }}>

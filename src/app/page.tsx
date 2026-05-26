@@ -116,15 +116,33 @@ export default function Page() {
   return (
     <div>
       <PageHeader title="Dashboard" subtitle="Archive command centre for your catalogue workflow." />
-      <div className="grid cards">
-        <StatCard label="Total Sessions" value={sessions.length} tone="neutral" />
-        <StatCard label="Total Songs / Works" value={songs.length} tone="neutral" />
-        <StatCard label="Sessions with 0 Songs" value={sessionsWithNoSongs} tone={sessionsWithNoSongs > 0 ? "amber" : "success"} href="#warn-no-songs" />
-        <StatCard label="Sessions with 0 Bounce" value={sessionsWithNoBounce} tone={sessionsWithNoBounce > 0 ? "amber" : "success"} href="#warn-session-no-bounce" />
-        <StatCard label="Songs Missing Bounce" value={missingBounce} tone={missingBounce > 0 ? "danger" : "success"} href="#warn-missing-bounce" />
-        <StatCard label="Songs Missing Lyrics" value={missingLyrics} tone={missingLyrics > 0 ? "danger" : "success"} href="#warn-missing-lyrics" />
-        <StatCard label="Cut / Released" value={cutReleased} tone={cutReleased > 0 ? "success" : "neutral"} />
-        <StatCard label="Disputed" value={disputed} tone={disputed > 0 ? "danger" : "success"} href="#warn-disputed" />
+      <SectionCard title="Immediate Actions">
+        <div className="grid cards">
+          <StatCard label="Songs Missing Bounce" value={missingBounce} tone={missingBounce > 0 ? "danger" : "success"} href="#warn-missing-bounce" />
+          <StatCard label="Songs Missing Lyrics" value={missingLyrics} tone={missingLyrics > 0 ? "danger" : "success"} href="#warn-missing-lyrics" />
+          <StatCard label="Sessions with 0 Songs" value={sessionsWithNoSongs} tone={sessionsWithNoSongs > 0 ? "amber" : "success"} href="#warn-no-songs" />
+          <StatCard label="Sessions with 0 Bounce" value={sessionsWithNoBounce} tone={sessionsWithNoBounce > 0 ? "amber" : "success"} href="#warn-session-no-bounce" />
+        </div>
+      </SectionCard>
+      <div className="section">
+      <SectionCard title="Evidence Risks">
+        <div className="grid cards">
+          <StatCard label="Weak/Partial Evidence" value={weakPartialSessions.length} tone={weakPartialSessions.length > 0 ? "amber" : "success"} href="#warn-weak-partial" />
+          <StatCard label="Disputed" value={disputed} tone={disputed > 0 ? "danger" : "success"} href="#warn-disputed" />
+          <StatCard label="Active Follow-ups" value={activeActions.length} tone={activeActions.length > 0 ? "amber" : "success"} href="/actions" />
+          <StatCard label="Playlist Responses" value={responseCount} tone={responseCount > 0 ? "neutral" : "success"} href="#warn-playlist-responses" />
+        </div>
+      </SectionCard>
+      </div>
+      <div className="section">
+      <SectionCard title="Health Snapshot">
+        <div className="grid cards">
+          <StatCard label="Total Sessions" value={sessions.length} tone="neutral" />
+          <StatCard label="Total Songs / Works" value={songs.length} tone="neutral" />
+          <StatCard label="Cut / Released" value={cutReleased} tone={cutReleased > 0 ? "success" : "neutral"} />
+          <StatCard label="Reviewed (All Time)" value={totalReviewedAll} tone="success" />
+        </div>
+      </SectionCard>
       </div>
       <div className="section">
       <SectionCard title="Archive Review Snapshot" actions={<Link className="button primary" href="/archive-progress">Open Archive Review</Link>}>

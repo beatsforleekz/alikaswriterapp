@@ -13,6 +13,7 @@ export default function ActionsPage() {
   const [rows, setRows] = useState<ActionItem[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [sortBy, setSortBy] = useState<"az" | "za" | "date" | "recent" | "added">("date");
 
   const load = async () => {
     const { data, error } = await supabase.from("action_items").select("*").order("due_date", { ascending: true });
@@ -56,20 +57,41 @@ export default function ActionsPage() {
   };
   const activeRows = rows.filter((r) => r.status !== "Done");
   const doneRows = rows.filter((r) => r.status === "Done");
+  const sortActions = (items: ActionItem[]) => {
+    const next = [...items];
+    if (sortBy === "az") next.sort((a, b) => a.task.localeCompare(b.task, undefined, { sensitivity: "base" }));
+    else if (sortBy === "za") next.sort((a, b) => b.task.localeCompare(a.task, undefined, { sensitivity: "base" }));
+    else if (sortBy === "date") next.sort((a, b) => (a.dueDate || "").localeCompare(b.dueDate || ""));
+    else if (sortBy === "added") next.sort((a, b) => a.id.localeCompare(b.id));
+    else next.sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
+    return next;
+  };
+  const sortedActiveRows = sortActions(activeRows);
+  const sortedDoneRows = sortActions(doneRows);
 
   return (
     <div>
       <PageHeader title="Actions" subtitle="Keep follow-ups visible and time-bound." actions={<button className="button primary" onClick={addRow}>Add Action</button>} />
       {errorMsg ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{errorMsg}</p> : null}
+      <div className="rowActions compact" style={{ marginBottom: ".6rem" }}>
+        <label className="helper">Sort</label>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "za" | "date" | "recent" | "added")} style={{ maxWidth: 200 }}>
+          <option value="az">A-Z</option>
+          <option value="za">Z-A</option>
+          <option value="date">Date (Oldest)</option>
+          <option value="recent">Most Recent</option>
+          <option value="added">Date Added</option>
+        </select>
+      </div>
       <SectionCard title="Active Actions">
         {activeRows.length === 0 ? <EmptyState title="No active action items" hint="Great, nothing currently action-needed." action={<button className="button primary" onClick={addRow}>Add Action</button>} /> : (
-          <div className="tableWrap"><table><thead><tr><th>Due Date</th><th>Priority</th><th>Session ID</th><th>Song ID</th><th>Task</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody>{activeRows.map((a)=><tr key={a.id}><td>{editingId===a.id ? <input type="date" value={a.dueDate} onChange={(e)=>update(a.id,"dueDate",e.target.value)} /> : (a.dueDate || <span className="helper">Add date</span>)}</td><td>{editingId===a.id ? <select value={a.priority} onChange={(e)=>update(a.id,"priority",e.target.value)}><option>Low</option><option>Medium</option><option>High</option></select> : a.priority}</td><td>{editingId===a.id ? <input value={a.sessionId || ""} onChange={(e)=>update(a.id,"sessionId",e.target.value)} /> : (a.sessionId || <span className="helper">Optional</span>)}</td><td>{editingId===a.id ? <input value={a.songId || ""} onChange={(e)=>update(a.id,"songId",e.target.value)} /> : (a.songId || <span className="helper">Optional</span>)}</td><td>{editingId===a.id ? <input value={a.task} onChange={(e)=>update(a.id,"task",e.target.value)} /> : (a.task || <span className="helper">Add task</span>)}</td><td>{editingId===a.id ? <select value={a.status} onChange={(e)=>update(a.id,"status",e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select> : a.status}</td><td>{editingId===a.id ? <input value={a.notes || ""} onChange={(e)=>update(a.id,"notes",e.target.value)} /> : (a.notes || <span className="helper">Optional</span>)}</td><td className="rowActions"><button className="button" onClick={()=>setEditingId(editingId===a.id ? null : a.id)}>{editingId===a.id ? "Save" : "Edit"}</button><button className="button primary" onClick={()=>markDone(a.id)}>Mark Done</button><button className="button" onClick={()=>del(a.id)}>Delete</button></td></tr>)}</tbody></table></div>
+          <div className="tableWrap"><table><thead><tr><th>Due Date</th><th>Priority</th><th>Session ID</th><th>Song ID</th><th>Task</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead><tbody>{sortedActiveRows.map((a)=><tr key={a.id}><td>{editingId===a.id ? <input type="date" value={a.dueDate} onChange={(e)=>update(a.id,"dueDate",e.target.value)} /> : (a.dueDate || <span className="helper">Add date</span>)}</td><td>{editingId===a.id ? <select value={a.priority} onChange={(e)=>update(a.id,"priority",e.target.value)}><option>Low</option><option>Medium</option><option>High</option></select> : a.priority}</td><td>{editingId===a.id ? <input value={a.sessionId || ""} onChange={(e)=>update(a.id,"sessionId",e.target.value)} /> : (a.sessionId || <span className="helper">Optional</span>)}</td><td>{editingId===a.id ? <input value={a.songId || ""} onChange={(e)=>update(a.id,"songId",e.target.value)} /> : (a.songId || <span className="helper">Optional</span>)}</td><td>{editingId===a.id ? <input value={a.task} onChange={(e)=>update(a.id,"task",e.target.value)} /> : (a.task || <span className="helper">Add task</span>)}</td><td>{editingId===a.id ? <select value={a.status} onChange={(e)=>update(a.id,"status",e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select> : a.status}</td><td>{editingId===a.id ? <input value={a.notes || ""} onChange={(e)=>update(a.id,"notes",e.target.value)} /> : (a.notes || <span className="helper">Optional</span>)}</td><td className="rowActions"><button className="button" onClick={()=>setEditingId(editingId===a.id ? null : a.id)}>{editingId===a.id ? "Save" : "Edit"}</button><button className="button primary" onClick={()=>markDone(a.id)}>Mark Done</button><button className="button" onClick={()=>del(a.id)}>Delete</button></td></tr>)}</tbody></table></div>
         )}
       </SectionCard>
 
       <SectionCard title="Done Actions">
         {doneRows.length === 0 ? <p className="helper">No completed actions yet.</p> : (
-          <div className="tableWrap"><table><thead><tr><th>Due Date</th><th>Priority</th><th>Task</th><th>Status</th><th>Actions</th></tr></thead><tbody>{doneRows.map((a)=><tr key={a.id}><td>{a.dueDate || <span className="helper">No date</span>}</td><td>{a.priority}</td><td style={{ textDecoration: "line-through", color: "var(--muted)" }}>{a.task || <span className="helper">Add task</span>}</td><td>{a.status}</td><td className="rowActions"><button className="button" onClick={()=>update(a.id,"status","Open")}>Reopen</button><button className="button" onClick={()=>del(a.id)}>Delete</button></td></tr>)}</tbody></table></div>
+          <div className="tableWrap"><table><thead><tr><th>Due Date</th><th>Priority</th><th>Task</th><th>Status</th><th>Actions</th></tr></thead><tbody>{sortedDoneRows.map((a)=><tr key={a.id}><td>{a.dueDate || <span className="helper">No date</span>}</td><td>{a.priority}</td><td style={{ textDecoration: "line-through", color: "var(--muted)" }}>{a.task || <span className="helper">Add task</span>}</td><td>{a.status}</td><td className="rowActions"><button className="button" onClick={()=>update(a.id,"status","Open")}>Reopen</button><button className="button" onClick={()=>del(a.id)}>Delete</button></td></tr>)}</tbody></table></div>
         )}
       </SectionCard>
     </div>

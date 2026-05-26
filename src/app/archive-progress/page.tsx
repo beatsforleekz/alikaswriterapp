@@ -144,6 +144,10 @@ export default function ArchiveProgressPage() {
   const [splitPct, setSplitPct] = useState("");
   const [copyFromSongId, setCopyFromSongId] = useState("");
   const [copyTargetSongIds, setCopyTargetSongIds] = useState<string[]>([]);
+  const [focusMode, setFocusMode] = useState(false);
+  const [sessionDraft, setSessionDraft] = useState({ date: "", title: "", location: "", notes: "" });
+  const [reviewSaveState, setReviewSaveState] = useState<"idle" | "unsaved" | "saving" | "saved" | "error">("idle");
+  const [lastSavedAt, setLastSavedAt] = useState("");
 
   const [errorMsg, setErrorMsg] = useState("");
   const [saveMsg, setSaveMsg] = useState("");
@@ -211,6 +215,17 @@ export default function ArchiveProgressPage() {
   const evidence = useMemo(() => calcEvidence(current, currentSongs, currentAssets, currentSplits, currentActions), [current, currentSongs, currentAssets, currentSplits, currentActions]);
 
   useEffect(() => {
+    if (!current) return;
+    setSessionDraft({
+      date: current.date || "",
+      title: current.title || "",
+      location: current.location || "",
+      notes: current.archive_review_notes || "",
+    });
+    setReviewSaveState("idle");
+  }, [current?.id, current?.date, current?.title, current?.location, current?.archive_review_notes]);
+
+  useEffect(() => {
     const next: Record<string, { title: string; bounce: string; lyrics: string }> = {};
     currentSongs.forEach((s) => {
       next[s.id] = { title: s.title || "", bounce: s.bounce_link || "", lyrics: s.lyrics_link || "" };
@@ -242,10 +257,14 @@ export default function ArchiveProgressPage() {
 
   const saveCurrent = async (markReviewed?: boolean) => {
     if (!current) return true;
+    setReviewSaveState("saving");
     const auto = calcEvidence(current, currentSongs, currentAssets, currentSplits, currentActions);
     const appleNoteExists = currentAssets.some((a) => normalizeEvidenceType(a.type || "") === "apple_note" && Boolean(a.url));
-    const notes = (notesDraft[current.id] ?? current.archive_review_notes ?? "").trim();
+    const notes = (sessionDraft.notes || notesDraft[current.id] || current.archive_review_notes || "").trim();
     const patch: Record<string, string | boolean | null> = {
+      date: sessionDraft.date || current.date || "",
+      title: (sessionDraft.title || current.title || "").trim(),
+      location: (sessionDraft.location || current.location || "").trim(),
       archive_review_notes: notes || null,
       evidence_strength: auto.level,
       apple_note_exists: appleNoteExists,
@@ -254,7 +273,10 @@ export default function ArchiveProgressPage() {
 
     const wasReviewed = Boolean(current.archive_reviewed);
     const ok = await patchSession(current.id, patch);
-    if (!ok) return false;
+    if (!ok) {
+      setReviewSaveState("error");
+      return false;
+    }
 
     const nowReviewed = Boolean(patch.archive_reviewed);
     if (!wasReviewed && nowReviewed) {
@@ -287,7 +309,10 @@ export default function ArchiveProgressPage() {
 
     await load();
     setSaveMsg("Progress saved.");
+    setReviewSaveState("saved");
+    setLastSavedAt(new Date().toLocaleString());
     window.setTimeout(() => setSaveMsg(""), 1200);
+    window.setTimeout(() => setReviewSaveState("idle"), 1400);
     return true;
   };
 
@@ -574,7 +599,7 @@ export default function ArchiveProgressPage() {
 
   return (
     <div>
-      <PageHeader title="Archive Progress" subtitle="Guided Archive Review workspace for chronological session processing." />
+      <PageHeader title="Archive Review" subtitle="Guided Archive Review workspace for chronological session processing." />
       {errorMsg ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{errorMsg}</p> : null}
 
       <SectionCard title="Archive Review Setup">
@@ -586,6 +611,7 @@ export default function ArchiveProgressPage() {
         </div>
         <div className="rowActions" style={{ marginTop: ".75rem" }}>
           <button className="button primary" onClick={startReview}>Start Review</button>
+          <button className={`button ${focusMode ? "primary" : ""}`} onClick={() => setFocusMode((v) => !v)}>{focusMode ? "Focus Mode On" : "Focus Mode Off"}</button>
           <span className="helper">{filteredSessions.length} sessions match filter ({periodSessions.length} total in period)</span>
         </div>
       </SectionCard>
@@ -621,13 +647,16 @@ export default function ArchiveProgressPage() {
             <div className="progressBar" style={{ marginBottom: ".8rem" }}><span style={{ width: `${progressPct}%` }} /></div>
 
             <div className="kv">
-              <dt>Date</dt><dd><input type="date" value={current.date || ""} onChange={async (e) => { await patchSession(current.id, { date: e.target.value }); await load(); }} /></dd>
-              <dt>Title</dt><dd><input value={current.title || ""} onChange={async (e) => { await patchSession(current.id, { title: e.target.value }); await load(); }} /></dd>
-              <dt>Location</dt><dd><input value={current.location || ""} onChange={async (e) => { await patchSession(current.id, { location: e.target.value }); await load(); }} /></dd>
+              <dt>Date</dt><dd><input type="date" value={sessionDraft.date} onChange={(e) => { setSessionDraft((p) => ({ ...p, date: e.target.value })); setReviewSaveState("unsaved"); }} /></dd>
+              <dt>Title</dt><dd><input value={sessionDraft.title} onChange={(e) => { setSessionDraft((p) => ({ ...p, title: e.target.value })); setReviewSaveState("unsaved"); }} /></dd>
+              <dt>Location</dt><dd><input value={sessionDraft.location} onChange={(e) => { setSessionDraft((p) => ({ ...p, location: e.target.value })); setReviewSaveState("unsaved"); }} /></dd>
               <dt>Archive Reviewed</dt><dd>{current.archive_reviewed ? "Yes" : "No"}</dd>
               <dt>Evidence Strength (Auto)</dt><dd><StatusBadge label={evidence.level} /></dd>
-              <dt>Review Notes</dt><dd><textarea value={notesDraft[current.id] ?? current.archive_review_notes ?? ""} onChange={(e) => setNotesDraft((p) => ({ ...p, [current.id]: e.target.value }))} placeholder="Add review notes for this session" /></dd>
+              <dt>Review Notes</dt><dd><textarea value={sessionDraft.notes} onChange={(e) => { setSessionDraft((p) => ({ ...p, notes: e.target.value })); setNotesDraft((p) => ({ ...p, [current.id]: e.target.value })); setReviewSaveState("unsaved"); }} placeholder="Add review notes for this session" /></dd>
             </div>
+            <p className="helper" style={{ marginTop: ".45rem" }}>
+              {reviewSaveState === "saving" ? "Saving..." : reviewSaveState === "unsaved" ? "Unsaved changes" : reviewSaveState === "saved" ? `Last saved ${lastSavedAt}` : reviewSaveState === "error" ? "Could not save changes" : (lastSavedAt ? `Last saved ${lastSavedAt}` : "")}
+            </p>
 
             <div className="card" style={{ marginTop: ".75rem" }}>
               <h3 style={{ color: "var(--text)", fontSize: ".95rem", marginBottom: ".45rem" }}>Evidence Strength Breakdown</h3>
@@ -646,7 +675,7 @@ export default function ArchiveProgressPage() {
               </ul>
             </div>
 
-            <SectionCard title="Songs / Works" actions={<div className="rowActions compact"><input value={newSongTitle} onChange={(e) => setNewSongTitle(e.target.value)} placeholder="Add song/work title" style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addSong}>Add Song</button></div>}>
+            {!focusMode ? <SectionCard title="Songs / Works" actions={<div className="rowActions compact"><input value={newSongTitle} onChange={(e) => setNewSongTitle(e.target.value)} placeholder="Add song/work title" style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addSong}>Add Song</button></div>}>
               {currentSongs.length === 0 ? <p className="helper">No linked songs/works yet.</p> : (
                 <div className="tableWrap">
                   <table>
@@ -664,9 +693,9 @@ export default function ArchiveProgressPage() {
                   </table>
                 </div>
               )}
-            </SectionCard>
+            </SectionCard> : null}
 
-            <SectionCard title="Writers / Splits" actions={<div className="rowActions compact"><select value={splitSongId} onChange={(e) => setSplitSongId(e.target.value)} style={{ minWidth: 180 }}><option value="">Select song</option>{currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}</select><input list="writer-dir-archive" value={splitWriterName} onChange={(e) => setSplitWriterName(e.target.value)} placeholder="Writer name" style={{ minWidth: 180 }} /><input value={splitPct} onChange={(e) => setSplitPct(e.target.value)} placeholder="Split %" style={{ maxWidth: 90 }} /><button className="button primary compact" onClick={addSplit}>Add Writer/Split</button><datalist id="writer-dir-archive">{writers.map((w) => <option key={w.id} value={w.name} />)}</datalist></div>}>
+            {!focusMode ? <SectionCard title="Writers / Splits" actions={<div className="rowActions compact"><select value={splitSongId} onChange={(e) => setSplitSongId(e.target.value)} style={{ minWidth: 180 }}><option value="">Select song</option>{currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}</select><input list="writer-dir-archive" value={splitWriterName} onChange={(e) => setSplitWriterName(e.target.value)} placeholder="Writer name" style={{ minWidth: 180 }} /><input value={splitPct} onChange={(e) => setSplitPct(e.target.value)} placeholder="Split %" style={{ maxWidth: 90 }} /><button className="button primary compact" onClick={addSplit}>Add Writer/Split</button><datalist id="writer-dir-archive">{writers.map((w) => <option key={w.id} value={w.name} />)}</datalist></div>}>
               <div className="rowActions compact" style={{ marginBottom: ".6rem" }}>
                 <select value={copyFromSongId} onChange={(e) => setCopyFromSongId(e.target.value)} style={{ minWidth: 220 }}>
                   <option value="">Duplicate writers from song...</option>
@@ -698,13 +727,13 @@ export default function ArchiveProgressPage() {
               {currentSplits.length === 0 ? <p className="helper">No writers/splits added yet.</p> : (
                 <div className="tableWrap"><table><thead><tr><th>Song</th><th>Writer</th><th>Split</th><th>Actions</th></tr></thead><tbody>{currentSplits.map((sp) => <tr key={sp.id}><td>{currentSongs.find((s) => s.id === sp.song_id)?.title || "Untitled"}</td><td>{sp.writer_name}</td><td>{sp.percentage ?? <span className="helper">auto</span>}</td><td><div className="rowActions compact"><button className="button compact" onClick={() => editSplit(sp)}>Edit</button><button className="button compact" onClick={() => deleteSplit(sp.id)}>Delete</button></div></td></tr>)}</tbody></table></div>
               )}
-            </SectionCard>
+            </SectionCard> : null}
 
-            <SectionCard title="Evidence / Assets" actions={<div className="rowActions compact"><select value={newAssetSongId} onChange={(e) => setNewAssetSongId(e.target.value)} style={{ minWidth: 160 }}><option value="">Select song</option>{currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}</select><select value={newAssetType} onChange={(e) => setNewAssetType(e.target.value)} style={{ minWidth: 160 }}><option value="bounce">Bounce</option><option value="lyrics">Lyrics</option><option value="acapella">Acapella</option><option value="voice_note">Voice Note</option><option value="apple_note">Apple Note</option><option value="google_doc">Google Doc</option><option value="dropbox">Dropbox</option><option value="message_evidence">Email/Pitch Trail</option><option value="screenshots">Screenshots</option><option value="other">Other</option></select><input value={newAssetUrl} onChange={(e) => setNewAssetUrl(e.target.value)} placeholder="https://..." style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addAsset}>Add Asset</button></div>}>
+            {!focusMode ? <SectionCard title="Evidence / Assets" actions={<div className="rowActions compact"><select value={newAssetSongId} onChange={(e) => setNewAssetSongId(e.target.value)} style={{ minWidth: 160 }}><option value="">Select song</option>{currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}</select><select value={newAssetType} onChange={(e) => setNewAssetType(e.target.value)} style={{ minWidth: 160 }}><option value="bounce">Bounce</option><option value="lyrics">Lyrics</option><option value="acapella">Acapella</option><option value="voice_note">Voice Note</option><option value="apple_note">Apple Note</option><option value="google_doc">Google Doc</option><option value="dropbox">Dropbox</option><option value="message_evidence">Email/Pitch Trail</option><option value="screenshots">Screenshots</option><option value="other">Other</option></select><input value={newAssetUrl} onChange={(e) => setNewAssetUrl(e.target.value)} placeholder="https://..." style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addAsset}>Add Asset</button></div>}>
               {currentAssets.length === 0 ? <p className="helper">No assets linked yet.</p> : (
                 <div className="tableWrap"><table><thead><tr><th>Song</th><th>Type</th><th>Link</th><th>Action</th></tr></thead><tbody>{currentAssets.map((a) => <tr key={a.id}><td>{currentSongs.find((s) => s.id === a.song_id)?.title || "Untitled"}</td><td>{a.type}</td><td>{a.url ? <a href={a.url} target="_blank" rel="noreferrer">Open</a> : <span className="helper">No link</span>}</td><td><button className="button compact" onClick={() => deleteAsset(a.id)}>Delete</button></td></tr>)}</tbody></table></div>
               )}
-            </SectionCard>
+            </SectionCard> : null}
 
             <SectionCard title="Follow-up Actions">
               {currentActions.length ? <div className="tableWrap"><table><thead><tr><th>Due</th><th>Task</th><th>Status</th><th>Actions</th></tr></thead><tbody>{currentActions.map((a) => <tr key={a.id}><td>{a.due_date || <span className="helper">No date</span>}</td><td>{a.task}</td><td><select value={a.status} onChange={(e) => updateActionStatus(a.id, e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select></td><td><div className="rowActions compact"><button className="button compact" onClick={() => editActionTask(a)}>Edit</button><button className="button compact" onClick={() => deleteAction(a.id)}>Delete</button></div></td></tr>)}</tbody></table></div> : <p className="helper">No follow-ups yet.</p>}
