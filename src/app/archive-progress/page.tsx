@@ -180,8 +180,14 @@ export default function ArchiveProgressPage() {
     .filter((s) => s.date?.startsWith(String(year)))
     .filter((s) => !startDate || s.date >= startDate)
     .filter((s) => !endDate || s.date <= endDate)
-    .filter((s) => (filter === "not-reviewed" ? !s.archive_reviewed : true))
-    .sort((a, b) => a.date.localeCompare(b.date)), [sessions, year, startDate, endDate, filter]);
+    .filter((s) => {
+      if (filter !== "not-reviewed") return true;
+      if (!s.archive_reviewed) return true;
+      const sessionActions = actions.filter((a) => String(a.session_id || "") === s.id);
+      const openStatuses = new Set(["open", "in progress", "pending", "todo"]);
+      return sessionActions.some((a) => openStatuses.has(String(a.status || "").toLowerCase().trim()));
+    })
+    .sort((a, b) => a.date.localeCompare(b.date)), [sessions, actions, year, startDate, endDate, filter]);
 
   const current = filteredSessions[cursor] ?? null;
   const currentSongs = useMemo(() => songs.filter((s) => String(s.session_id || "") === String(current?.id || "")), [songs, current?.id]);
@@ -216,12 +222,14 @@ export default function ArchiveProgressPage() {
   const saveCurrent = async (markReviewed?: boolean) => {
     if (!current) return true;
     const auto = calcEvidence(current, currentSongs, currentAssets, currentSplits, currentActions);
+    const appleNoteExists = currentAssets.some((a) => normalizeEvidenceType(a.type || "") === "apple_note" && Boolean(a.url));
     const notes = (notesDraft[current.id] ?? current.archive_review_notes ?? "").trim();
     const patch: Record<string, string | boolean | null> = {
       archive_review_notes: notes || null,
       evidence_strength: auto.level,
+      apple_note_exists: appleNoteExists,
     };
-    if (typeof markReviewed === "boolean") patch.archive_reviewed = markReviewed;
+    patch.archive_reviewed = typeof markReviewed === "boolean" ? markReviewed : true;
 
     const ok = await patchSession(current.id, patch);
     if (!ok) return false;
@@ -412,8 +420,8 @@ export default function ArchiveProgressPage() {
               <dt>Date</dt><dd><input type="date" value={current.date || ""} onChange={async (e) => { await patchSession(current.id, { date: e.target.value }); await load(); }} /></dd>
               <dt>Title</dt><dd><input value={current.title || ""} onChange={async (e) => { await patchSession(current.id, { title: e.target.value }); await load(); }} /></dd>
               <dt>Location</dt><dd><input value={current.location || ""} onChange={async (e) => { await patchSession(current.id, { location: e.target.value }); await load(); }} /></dd>
-              <dt>Archive Reviewed</dt><dd><input type="checkbox" checked={Boolean(current.archive_reviewed)} onChange={async (e) => { await patchSession(current.id, { archive_reviewed: e.target.checked }); await load(); }} /></dd>
-              <dt>Apple Note Exists</dt><dd><input type="checkbox" checked={Boolean(current.apple_note_exists)} onChange={async (e) => { await patchSession(current.id, { apple_note_exists: e.target.checked }); await load(); }} /></dd>
+              <dt>Archive Reviewed</dt><dd>{current.archive_reviewed ? "Yes" : "No"}</dd>
+              <dt>Apple Note Exists</dt><dd>{currentAssets.some((a) => normalizeEvidenceType(a.type || "") === "apple_note" && Boolean(a.url)) ? "Yes (from evidence links)" : "No"}</dd>
               <dt>Evidence Strength (Auto)</dt><dd><StatusBadge label={evidence.level} /></dd>
               <dt>Review Notes</dt><dd><textarea value={notesDraft[current.id] ?? current.archive_review_notes ?? ""} onChange={(e) => setNotesDraft((p) => ({ ...p, [current.id]: e.target.value }))} placeholder="Add review notes for this session" /></dd>
             </div>
