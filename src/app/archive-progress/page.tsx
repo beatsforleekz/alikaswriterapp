@@ -299,6 +299,41 @@ export default function ArchiveProgressPage() {
       setErrorMsg(supabaseUserMessage("Could not update song/work", error));
       return;
     }
+
+    const syncCoreEvidenceLink = async (type: "bounce" | "lyrics", urlValue: string | null | undefined) => {
+      const normalizedUrl = String(urlValue || "").trim();
+      const existingForType = currentAssets.filter((a) => String(a.song_id) === String(songId) && normalizeEvidenceType(a.type || "") === type);
+      if (!normalizedUrl) {
+        if (existingForType.length) {
+          const { error: delErr } = await supabase.from("asset_links").delete().eq("song_id", songId).eq("type", type);
+          if (delErr) {
+            logSupabaseError(`Failed to clear ${type} asset link during song save`, delErr);
+            setErrorMsg(supabaseUserMessage(`Could not sync ${type} evidence`, delErr));
+          }
+        }
+        return;
+      }
+
+      const exact = existingForType.find((a) => String(a.url || "").trim() === normalizedUrl);
+      if (exact) return;
+      if (existingForType.length) {
+        const target = existingForType[0];
+        const { error: updErr } = await supabase.from("asset_links").update({ url: normalizedUrl }).eq("id", target.id);
+        if (updErr) {
+          logSupabaseError(`Failed to update existing ${type} asset link during song save`, updErr);
+          setErrorMsg(supabaseUserMessage(`Could not sync ${type} evidence`, updErr));
+        }
+      } else {
+        const { error: insErr } = await supabase.from("asset_links").insert({ song_id: songId, type, url: normalizedUrl });
+        if (insErr) {
+          logSupabaseError(`Failed to insert ${type} asset link during song save`, insErr);
+          setErrorMsg(supabaseUserMessage(`Could not sync ${type} evidence`, insErr));
+        }
+      }
+    };
+
+    if (Object.prototype.hasOwnProperty.call(patch, "bounce_link")) await syncCoreEvidenceLink("bounce", patch.bounce_link);
+    if (Object.prototype.hasOwnProperty.call(patch, "lyrics_link")) await syncCoreEvidenceLink("lyrics", patch.lyrics_link);
     await load();
   };
 
