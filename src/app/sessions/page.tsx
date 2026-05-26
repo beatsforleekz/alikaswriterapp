@@ -339,7 +339,7 @@ export default function SessionsPage() {
                       const effective = effectiveStrengthBySession[se.id];
                       return (
                         <tr key={se.id}>
-                          <td>{editingId === se.id ? <input type="date" value={se.date} onChange={(e) => update(se.id, "date", e.target.value)} /> : (se.date || <span className="helper">Add date</span>)}</td>
+                          <td style={{ whiteSpace: "nowrap" }}>{editingId === se.id ? <input type="date" value={se.date} onChange={(e) => update(se.id, "date", e.target.value)} /> : (se.date || <span className="helper">Add date</span>)}</td>
                           <td>{editingId === se.id ? <input value={se.title} onChange={(e) => update(se.id, "title", e.target.value)} /> : <Link href={`/sessions/${se.id}`}>{se.title || "Untitled Session"}</Link>}</td>
                           <td>{editingId === se.id ? <input value={se.location} onChange={(e) => update(se.id, "location", e.target.value)} /> : (se.location || <span className="helper">Add location</span>)}</td>
                           <td>{editingId === se.id ? <select value={se.source} onChange={(e) => update(se.id, "source", e.target.value)}><option value="manual">manual</option><option value="calendar">calendar</option><option value="calendar_import">calendar_import</option></select> : se.source}</td>
