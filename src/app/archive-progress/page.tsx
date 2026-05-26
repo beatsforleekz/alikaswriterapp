@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import PageHeader from "@/components/ui/PageHeader";
 import SectionCard from "@/components/ui/SectionCard";
@@ -144,6 +144,7 @@ export default function ArchiveProgressPage() {
 
   const [errorMsg, setErrorMsg] = useState("");
   const [saveMsg, setSaveMsg] = useState("");
+  const reviewTopRef = useRef<HTMLDivElement | null>(null);
 
   const load = async () => {
     const [sRes, songRes, assetRes, splitRes, writerRes, actionRes] = await Promise.all([
@@ -268,10 +269,17 @@ export default function ArchiveProgressPage() {
   const back = () => setCursor((c) => Math.max(c - 1, 0));
   const next = () => setCursor((c) => Math.min(c + 1, Math.max(filteredSessions.length - 1, 0)));
 
+  const scrollReviewTop = () => {
+    window.setTimeout(() => reviewTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 40);
+  };
+
   const markReviewedAndNext = async () => {
     const ok = await saveCurrent(true);
     if (!ok) return;
-    if (cursor < filteredSessions.length - 1) setCursor((c) => c + 1);
+    if (cursor < filteredSessions.length - 1) {
+      setCursor((c) => c + 1);
+      scrollReviewTop();
+    }
   };
 
   const updateSongField = async (songId: string, patch: { bounce_link?: string | null; lyrics_link?: string | null; title?: string }) => {
@@ -422,6 +430,7 @@ export default function ArchiveProgressPage() {
           </SectionCard>
         ) : (
           <SectionCard title="Guided Review Step" actions={<Link className="button compact" href={`/sessions/${current.id}`}>Open Full Session Workspace</Link>}>
+            <div ref={reviewTopRef} />
             <div className="rowActions" style={{ justifyContent: "space-between", marginBottom: ".55rem" }}>
               <strong>Session {cursor + 1} of {filteredSessions.length}</strong>
               <span className="helper">Reviewed: {reviewedCount} · Remaining: {remainingCount}</span>
@@ -497,10 +506,10 @@ export default function ArchiveProgressPage() {
             </SectionCard>
 
             <div className="rowActions" style={{ marginTop: ".85rem" }}>
-              <button className="button" onClick={back} disabled={cursor === 0}>Back</button>
-              <button className="button" onClick={next} disabled={cursor >= filteredSessions.length - 1}>Next</button>
+              <button className="button" onClick={() => { back(); scrollReviewTop(); }} disabled={cursor === 0}>Back</button>
+              <button className="button" onClick={() => { next(); scrollReviewTop(); }} disabled={cursor >= filteredSessions.length - 1}>Next</button>
               <button className="button primary" onClick={markReviewedAndNext}>Mark Reviewed & Next</button>
-              <button className="button" onClick={() => saveCurrent()}>Save Progress</button>
+              <button className="button" onClick={async () => { const ok = await saveCurrent(); if (ok) scrollReviewTop(); }}>Save Progress</button>
               {saveMsg ? <span className="helper">{saveMsg}</span> : null}
             </div>
             <p className="helper" style={{ marginTop: ".55rem" }}>Archive Reviewed means this session has been intentionally reviewed and outstanding items acknowledged, not necessarily fully complete.</p>
