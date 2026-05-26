@@ -16,11 +16,12 @@ type SessionLite = {
   archive_reviewed?: boolean;
   archive_review_notes?: string;
   evidence_strength?: string;
-  evidence_strength_override?: boolean;
+  apple_note_exists?: boolean;
 };
 type SongLite = { id: string; session_id?: string | null; title: string; bounce_link?: string | null; lyrics_link?: string | null };
-type AssetLite = { song_id: string; type: string; url?: string | null };
-type SplitLite = { song_id: string; writer_name: string; percentage?: number | null };
+type AssetLite = { id: string; song_id: string; type: string; url?: string | null };
+type SplitLite = { id: string; song_id: string; writer_id: string; writer_name: string; percentage?: number | null };
+type WriterLite = { id: string; name: string };
 type ActionLite = { id: string; session_id?: string | null; due_date?: string | null; task: string; status: string; created_at?: string | null };
 
 type ReviewFilter = "not-reviewed" | "all";
@@ -39,11 +40,87 @@ function fmtDate(iso: string) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" });
 }
 
+function calcEvidence(session: SessionLite | null, songs: SongLite[], assets: AssetLite[], splits: SplitLite[], actions: ActionLite[]) {
+  const hasBounce = (song: SongLite) => Boolean(song.bounce_link) || assets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "bounce" && Boolean(a.url));
+  const hasLyrics = (song: SongLite) => Boolean(song.lyrics_link) || assets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "lyrics" && Boolean(a.url));
+  const totalSongs = songs.length;
+  const bounceCount = songs.filter((s) => hasBounce(s)).length;
+  const lyricsCount = songs.filter((s) => hasLyrics(s)).length;
+  const allSongsHaveFullEvidence = totalSongs > 0 && songs.every((s) => hasBounce(s) && hasLyrics(s));
+  const voiceNoteExists = assets.some((a) => normalizeEvidenceType(a.type || "") === "voice_note" && Boolean(a.url));
+  const acapellaExists = assets.some((a) => normalizeEvidenceType(a.type || "") === "acapella" && Boolean(a.url));
+  const googleDocExists = assets.some((a) => normalizeEvidenceType(a.type || "") === "google_doc" && Boolean(a.url));
+  const dropboxExists = assets.some((a) => normalizeEvidenceType(a.type || "") === "dropbox" && Boolean(a.url));
+  const appleNoteExists = Boolean(session?.apple_note_exists) || assets.some((a) => normalizeEvidenceType(a.type || "") === "apple_note" && Boolean(a.url));
+  const emailTrailExists = assets.some((a) => ["message_evidence", "screenshots"].includes(normalizeEvidenceType(a.type || "")) && Boolean(a.url));
+  const writersAdded = splits.length > 0;
+  const splitsAdded = splits.some((s) => s.percentage !== null && s.percentage !== undefined);
+  const attendeesAdded = writersAdded;
+  const songTitlesLogged = totalSongs > 0;
+  const followUpLogged = actions.length > 0;
+  const sessionCore = Boolean(session?.date?.trim()) && Boolean(session?.title?.trim());
+
+  let score = 0;
+  if (sessionCore) score += 1;
+  if (songTitlesLogged) score += 1;
+  if (bounceCount > 0) score += 2;
+  if (lyricsCount > 0) score += 2;
+  if (voiceNoteExists) score += 1;
+  if (acapellaExists) score += 1;
+  if (appleNoteExists) score += 1;
+  if (googleDocExists) score += 1;
+  if (dropboxExists) score += 1;
+  if (emailTrailExists) score += 1;
+  if (writersAdded) score += 2;
+  if (splitsAdded) score += 1;
+  if (attendeesAdded) score += 1;
+  if (followUpLogged) score += 1;
+
+  let level = "Partial";
+  if (bounceCount === 0 && lyricsCount === 0 && score <= 3) level = "Weak";
+  else if ((bounceCount > 0 || lyricsCount > 0) && score < 9) level = "Partial";
+  else if (bounceCount > 0 && lyricsCount > 0 && score >= 9 && score < 13) level = "Strong";
+  else if (allSongsHaveFullEvidence && writersAdded && splitsAdded && (dropboxExists || googleDocExists || appleNoteExists || voiceNoteExists || acapellaExists) && (session?.archive_reviewed || followUpLogged)) level = "Complete";
+  else level = score >= 9 ? "Strong" : "Partial";
+
+  const blockers: string[] = [];
+  if (!sessionCore) blockers.push("Missing session date/title");
+  if (!songTitlesLogged) blockers.push("No linked songs/works");
+  if (bounceCount < totalSongs) blockers.push(`Bounce missing on ${Math.max(totalSongs - bounceCount, 0)} song(s)`);
+  if (lyricsCount < totalSongs) blockers.push(`Lyrics missing on ${Math.max(totalSongs - lyricsCount, 0)} song(s)`);
+  if (!writersAdded) blockers.push("No writers/attendees added");
+  if (!splitsAdded) blockers.push("No split percentages added");
+  if (!(dropboxExists || googleDocExists || appleNoteExists || voiceNoteExists || acapellaExists || emailTrailExists)) blockers.push("No supporting evidence links");
+
+  const contributors: string[] = [];
+  if (sessionCore) contributors.push("Session core details present");
+  if (songTitlesLogged) contributors.push("Songs/works linked");
+  if (bounceCount > 0) contributors.push(`Bounce coverage ${bounceCount}/${totalSongs}`);
+  if (lyricsCount > 0) contributors.push(`Lyrics coverage ${lyricsCount}/${totalSongs}`);
+  if (writersAdded) contributors.push("Writers added");
+  if (splitsAdded) contributors.push("Splits added");
+  if (voiceNoteExists) contributors.push("Voice note evidence");
+  if (acapellaExists) contributors.push("Acapella evidence (optional)");
+  if (googleDocExists || dropboxExists || appleNoteExists) contributors.push("Admin/supporting links present");
+  if (followUpLogged) contributors.push("Follow-up actions logged");
+
+  return {
+    level,
+    score,
+    totalSongs,
+    bounceCount,
+    lyricsCount,
+    blockers,
+    contributors,
+  };
+}
+
 export default function ArchiveProgressPage() {
   const [sessions, setSessions] = useState<SessionLite[]>([]);
   const [songs, setSongs] = useState<SongLite[]>([]);
   const [assets, setAssets] = useState<AssetLite[]>([]);
   const [splits, setSplits] = useState<SplitLite[]>([]);
+  const [writers, setWriters] = useState<WriterLite[]>([]);
   const [actions, setActions] = useState<ActionLite[]>([]);
 
   const [year, setYear] = useState<number>(years[0]);
@@ -52,23 +129,33 @@ export default function ArchiveProgressPage() {
   const [filter, setFilter] = useState<ReviewFilter>("not-reviewed");
   const [inReview, setInReview] = useState(false);
   const [cursor, setCursor] = useState(0);
+
   const [notesDraft, setNotesDraft] = useState<Record<string, string>>({});
-  const [strengthDraft, setStrengthDraft] = useState<Record<string, string>>({});
   const [followUpTask, setFollowUpTask] = useState("");
   const [followUpDue, setFollowUpDue] = useState("");
+  const [followUpStatus, setFollowUpStatus] = useState("Open");
+  const [newSongTitle, setNewSongTitle] = useState("");
+  const [newAssetType, setNewAssetType] = useState("other");
+  const [newAssetSongId, setNewAssetSongId] = useState("");
+  const [newAssetUrl, setNewAssetUrl] = useState("");
+  const [splitSongId, setSplitSongId] = useState("");
+  const [splitWriterName, setSplitWriterName] = useState("");
+  const [splitPct, setSplitPct] = useState("");
+
   const [errorMsg, setErrorMsg] = useState("");
   const [saveMsg, setSaveMsg] = useState("");
 
   const load = async () => {
-    const [sRes, songRes, assetRes, splitRes, actionRes] = await Promise.all([
-      supabase.from("sessions").select("id,date,title,location,archive_reviewed,archive_review_notes,evidence_strength,evidence_strength_override").order("date", { ascending: true }),
+    const [sRes, songRes, assetRes, splitRes, writerRes, actionRes] = await Promise.all([
+      supabase.from("sessions").select("id,date,title,location,archive_reviewed,archive_review_notes,evidence_strength,apple_note_exists").order("date", { ascending: true }),
       supabase.from("song_works").select("id,session_id,title,bounce_link,lyrics_link"),
-      supabase.from("asset_links").select("song_id,type,url"),
-      supabase.from("song_writer_splits").select("song_id,percentage,writers(name)"),
+      supabase.from("asset_links").select("id,song_id,type,url"),
+      supabase.from("song_writer_splits").select("id,song_id,writer_id,percentage,writers(name)"),
+      supabase.from("writers").select("id,name").order("name", { ascending: true }),
       supabase.from("action_items").select("id,session_id,due_date,task,status,created_at").order("created_at", { ascending: false }),
     ]);
-    if (sRes.error || songRes.error || assetRes.error || splitRes.error || actionRes.error) {
-      const e = sRes.error || songRes.error || assetRes.error || splitRes.error || actionRes.error;
+    if (sRes.error || songRes.error || assetRes.error || splitRes.error || writerRes.error || actionRes.error) {
+      const e = sRes.error || songRes.error || assetRes.error || splitRes.error || writerRes.error || actionRes.error;
       logSupabaseError("Failed to load archive review data", e);
       setErrorMsg(supabaseUserMessage("Could not load archive review data", e));
       return;
@@ -78,9 +165,10 @@ export default function ArchiveProgressPage() {
     setSongs((songRes.data ?? []) as SongLite[]);
     setAssets((assetRes.data ?? []) as AssetLite[]);
     setSplits((splitRes.data ?? []).map((r) => {
-      const row = r as { song_id: string; percentage?: number | null; writers?: { name?: string } | null };
-      return { song_id: String(row.song_id), writer_name: String(row.writers?.name ?? ""), percentage: row.percentage ?? null };
+      const row = r as { id: string; song_id: string; writer_id: string; percentage?: number | null; writers?: { name?: string } | null };
+      return { id: String(row.id), song_id: String(row.song_id), writer_id: String(row.writer_id), writer_name: String(row.writers?.name ?? ""), percentage: row.percentage ?? null };
     }));
+    setWriters((writerRes.data ?? []) as WriterLite[]);
     setActions((actionRes.data ?? []) as ActionLite[]);
   };
 
@@ -88,14 +176,12 @@ export default function ArchiveProgressPage() {
     load();
   }, []);
 
-  const filteredSessions = useMemo(() => {
-    return sessions
-      .filter((s) => s.date?.startsWith(String(year)))
-      .filter((s) => !startDate || s.date >= startDate)
-      .filter((s) => !endDate || s.date <= endDate)
-      .filter((s) => (filter === "not-reviewed" ? !s.archive_reviewed : true))
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [sessions, year, startDate, endDate, filter]);
+  const filteredSessions = useMemo(() => sessions
+    .filter((s) => s.date?.startsWith(String(year)))
+    .filter((s) => !startDate || s.date >= startDate)
+    .filter((s) => !endDate || s.date <= endDate)
+    .filter((s) => (filter === "not-reviewed" ? !s.archive_reviewed : true))
+    .sort((a, b) => a.date.localeCompare(b.date)), [sessions, year, startDate, endDate, filter]);
 
   const current = filteredSessions[cursor] ?? null;
   const currentSongs = useMemo(() => songs.filter((s) => String(s.session_id || "") === String(current?.id || "")), [songs, current?.id]);
@@ -103,23 +189,7 @@ export default function ArchiveProgressPage() {
   const currentAssets = useMemo(() => assets.filter((a) => currentSongIds.has(String(a.song_id))), [assets, currentSongIds]);
   const currentSplits = useMemo(() => splits.filter((sp) => currentSongIds.has(String(sp.song_id))), [splits, currentSongIds]);
   const currentActions = useMemo(() => actions.filter((a) => String(a.session_id || "") === String(current?.id || "")), [actions, current?.id]);
-
-  const evidence = useMemo(() => {
-    const hasBounce = (song: SongLite) => Boolean(song.bounce_link) || currentAssets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "bounce" && Boolean(a.url));
-    const hasLyrics = (song: SongLite) => Boolean(song.lyrics_link) || currentAssets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "lyrics" && Boolean(a.url));
-    const totalSongs = currentSongs.length;
-    const bounceCount = currentSongs.filter((s) => hasBounce(s)).length;
-    const lyricsCount = currentSongs.filter((s) => hasLyrics(s)).length;
-    const writersCount = [...new Set(currentSplits.map((s) => s.writer_name).filter(Boolean))].length;
-    const hasSupporting = currentAssets.some((a) => ["voice_note", "acapella", "dropbox", "google_doc", "apple_note", "message_evidence", "screenshots"].includes(normalizeEvidenceType(a.type || "")) && Boolean(a.url));
-    const missing: string[] = [];
-    if (totalSongs === 0) missing.push("No linked songs");
-    if (bounceCount < totalSongs) missing.push("Missing Bounce");
-    if (lyricsCount < totalSongs) missing.push("Missing Lyrics");
-    if (writersCount === 0) missing.push("No Writers");
-    if (!hasSupporting) missing.push("No Supporting Links");
-    return { totalSongs, bounceCount, lyricsCount, writersCount, hasSupporting, missing };
-  }, [currentSongs, currentAssets, currentSplits]);
+  const evidence = useMemo(() => calcEvidence(current, currentSongs, currentAssets, currentSplits, currentActions), [current, currentSongs, currentAssets, currentSplits, currentActions]);
 
   const reviewedCount = useMemo(() => filteredSessions.filter((s) => s.archive_reviewed).length, [filteredSessions]);
   const remainingCount = Math.max(filteredSessions.length - reviewedCount, 0);
@@ -132,29 +202,36 @@ export default function ArchiveProgressPage() {
     setErrorMsg("");
   };
 
+  const patchSession = async (sessionId: string, patch: Record<string, string | boolean | null>) => {
+    setErrorMsg("");
+    const { error } = await supabase.from("sessions").update(patch).eq("id", sessionId);
+    if (error) {
+      logSupabaseError("Failed to update session in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not update session", error));
+      return false;
+    }
+    return true;
+  };
+
   const saveCurrent = async (markReviewed?: boolean) => {
     if (!current) return true;
-    setErrorMsg("");
+    const auto = calcEvidence(current, currentSongs, currentAssets, currentSplits, currentActions);
     const notes = (notesDraft[current.id] ?? current.archive_review_notes ?? "").trim();
-    const strength = (strengthDraft[current.id] ?? current.evidence_strength ?? "").trim();
     const patch: Record<string, string | boolean | null> = {
       archive_review_notes: notes || null,
-      evidence_strength: strength || null,
+      evidence_strength: auto.level,
     };
     if (typeof markReviewed === "boolean") patch.archive_reviewed = markReviewed;
 
-    const { error } = await supabase.from("sessions").update(patch).eq("id", current.id);
-    if (error) {
-      logSupabaseError("Failed to save archive review step", error);
-      setErrorMsg(supabaseUserMessage("Could not save this review step", error));
-      return false;
-    }
+    const ok = await patchSession(current.id, patch);
+    if (!ok) return false;
+
     if (followUpTask.trim()) {
       const { error: actionErr } = await supabase.from("action_items").insert({
         task: followUpTask.trim(),
         due_date: followUpDue || "",
         priority: "Medium",
-        status: "Open",
+        status: followUpStatus || "Open",
         session_id: current.id,
       });
       if (actionErr) {
@@ -163,6 +240,7 @@ export default function ArchiveProgressPage() {
       } else {
         setFollowUpTask("");
         setFollowUpDue("");
+        setFollowUpStatus("Open");
       }
     }
 
@@ -188,24 +266,110 @@ export default function ArchiveProgressPage() {
     if (cursor < filteredSessions.length - 1) setCursor((c) => c + 1);
   };
 
+  const updateSongField = async (songId: string, patch: { bounce_link?: string | null; lyrics_link?: string | null; title?: string }) => {
+    const { error } = await supabase.from("song_works").update(patch).eq("id", songId);
+    if (error) {
+      logSupabaseError("Failed to update song/work in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not update song/work", error));
+      return;
+    }
+    await load();
+  };
+
+  const addSong = async () => {
+    if (!current || !newSongTitle.trim()) return;
+    const { error } = await supabase.from("song_works").insert({ title: newSongTitle.trim(), session_id: current.id, status: "Started" });
+    if (error) {
+      logSupabaseError("Failed to add song/work in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not add song/work", error));
+      return;
+    }
+    setNewSongTitle("");
+    await load();
+  };
+
+  const addAsset = async () => {
+    if (!newAssetSongId || !newAssetType || !newAssetUrl.trim()) return;
+    const { error } = await supabase.from("asset_links").insert({ song_id: newAssetSongId, type: newAssetType, url: newAssetUrl.trim() });
+    if (error) {
+      logSupabaseError("Failed to add asset in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not add evidence asset", error));
+      return;
+    }
+    setNewAssetUrl("");
+    await load();
+  };
+
+  const deleteAsset = async (id: string) => {
+    const { error } = await supabase.from("asset_links").delete().eq("id", id);
+    if (error) {
+      logSupabaseError("Failed to delete asset in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not delete evidence asset", error));
+      return;
+    }
+    await load();
+  };
+
+  const addSplit = async () => {
+    if (!splitSongId || !splitWriterName.trim()) return;
+    let writerId = writers.find((w) => w.name.toLowerCase() === splitWriterName.trim().toLowerCase())?.id;
+    if (!writerId) {
+      const { data, error } = await supabase.from("writers").insert({ name: splitWriterName.trim() }).select("id").single();
+      if (error || !data) {
+        logSupabaseError("Failed to create writer in archive review", error);
+        setErrorMsg(supabaseUserMessage("Could not create writer", error));
+        return;
+      }
+      writerId = String((data as { id: string }).id);
+    }
+    const pct = splitPct.trim() ? Number(splitPct) : null;
+    const { error } = await supabase.from("song_writer_splits").insert({ song_id: splitSongId, writer_id: writerId, percentage: pct });
+    if (error) {
+      logSupabaseError("Failed to add split in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not add writer/split", error));
+      return;
+    }
+    setSplitWriterName("");
+    setSplitPct("");
+    await load();
+  };
+
+  const updateActionStatus = async (actionId: string, status: string) => {
+    const { error } = await supabase.from("action_items").update({ status }).eq("id", actionId);
+    if (error) {
+      logSupabaseError("Failed to update action status in archive review", error);
+      setErrorMsg(supabaseUserMessage("Could not update follow-up", error));
+      return;
+    }
+    await load();
+  };
+
   const completionStats = useMemo(() => {
     const sessionIds = new Set(filteredSessions.map((s) => s.id));
     const scopedSongs = songs.filter((s) => sessionIds.has(String(s.session_id || "")));
-    const hasBounce = (song: SongLite) => Boolean(song.bounce_link) || assets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "bounce" && Boolean(a.url));
-    const hasLyrics = (song: SongLite) => Boolean(song.lyrics_link) || assets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "lyrics" && Boolean(a.url));
-    const missingBounce = scopedSongs.filter((s) => !hasBounce(s)).length;
-    const missingLyrics = scopedSongs.filter((s) => !hasLyrics(s)).length;
-    const weakPartial = filteredSessions.filter((s) => ["Weak", "Partial"].includes(String(s.evidence_strength || ""))).length;
+    const scopedAssets = assets.filter((a) => scopedSongs.some((s) => s.id === a.song_id));
+    const scopedSplits = splits.filter((sp) => scopedSongs.some((s) => s.id === sp.song_id));
+    const missingBounce = scopedSongs.filter((song) => !(Boolean(song.bounce_link) || scopedAssets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "bounce" && Boolean(a.url)))).length;
+    const missingLyrics = scopedSongs.filter((song) => !(Boolean(song.lyrics_link) || scopedAssets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "lyrics" && Boolean(a.url)))).length;
+    const weakPartial = filteredSessions.filter((s) => {
+      const ss = songs.filter((x) => String(x.session_id || "") === s.id);
+      const sids = new Set(ss.map((x) => x.id));
+      const sa = assets.filter((a) => sids.has(a.song_id));
+      const sp = splits.filter((x) => sids.has(x.song_id));
+      const ac = actions.filter((x) => String(x.session_id || "") === s.id);
+      const lvl = calcEvidence(s, ss, sa, sp, ac).level;
+      return lvl === "Weak" || lvl === "Partial";
+    }).length;
     const followUps = actions.filter((a) => sessionIds.has(String(a.session_id || ""))).length;
-    return { missingBounce, missingLyrics, weakPartial, followUps };
-  }, [filteredSessions, songs, assets, actions]);
+    return { missingBounce, missingLyrics, weakPartial, followUps, scopedSplits: scopedSplits.length };
+  }, [filteredSessions, songs, assets, splits, actions]);
 
   return (
     <div>
-      <PageHeader title="Archive Progress" subtitle="Guided Archive Review workflow by period." />
+      <PageHeader title="Archive Progress" subtitle="Guided Archive Review workspace for chronological session processing." />
       {errorMsg ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{errorMsg}</p> : null}
 
-      <SectionCard title="Archive Review Tool">
+      <SectionCard title="Archive Review Setup">
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: ".6rem" }}>
           <div><label className="helper">Year</label><select value={year} onChange={(e) => { const y = Number(e.target.value); setYear(y); setStartDate(`${y}-01-01`); setEndDate(`${y}-12-31`); }}>{years.map((y) => <option key={y} value={y}>{y}</option>)}</select></div>
           <div><label className="helper">Start date</label><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></div>
@@ -245,51 +409,72 @@ export default function ArchiveProgressPage() {
             <div className="progressBar" style={{ marginBottom: ".8rem" }}><span style={{ width: `${progressPct}%` }} /></div>
 
             <div className="kv">
-              <dt>Date</dt><dd>{fmtDate(current.date)}</dd>
-              <dt>Title</dt><dd>{current.title || <span className="helper">Untitled Session</span>}</dd>
-              <dt>Location</dt><dd>{current.location || <span className="helper">No location</span>}</dd>
-              <dt>Archive Reviewed</dt><dd>{current.archive_reviewed ? "Yes" : "No"}</dd>
-              <dt>Evidence Strength</dt><dd><select value={strengthDraft[current.id] ?? current.evidence_strength ?? ""} onChange={(e) => setStrengthDraft((p) => ({ ...p, [current.id]: e.target.value }))}><option value="">Not Set</option><option value="Weak">Weak</option><option value="Partial">Partial</option><option value="Strong">Strong</option><option value="Complete">Complete</option></select></dd>
+              <dt>Date</dt><dd><input type="date" value={current.date || ""} onChange={async (e) => { await patchSession(current.id, { date: e.target.value }); await load(); }} /></dd>
+              <dt>Title</dt><dd><input value={current.title || ""} onChange={async (e) => { await patchSession(current.id, { title: e.target.value }); await load(); }} /></dd>
+              <dt>Location</dt><dd><input value={current.location || ""} onChange={async (e) => { await patchSession(current.id, { location: e.target.value }); await load(); }} /></dd>
+              <dt>Archive Reviewed</dt><dd><input type="checkbox" checked={Boolean(current.archive_reviewed)} onChange={async (e) => { await patchSession(current.id, { archive_reviewed: e.target.checked }); await load(); }} /></dd>
+              <dt>Apple Note Exists</dt><dd><input type="checkbox" checked={Boolean(current.apple_note_exists)} onChange={async (e) => { await patchSession(current.id, { apple_note_exists: e.target.checked }); await load(); }} /></dd>
+              <dt>Evidence Strength (Auto)</dt><dd><StatusBadge label={evidence.level} /></dd>
               <dt>Review Notes</dt><dd><textarea value={notesDraft[current.id] ?? current.archive_review_notes ?? ""} onChange={(e) => setNotesDraft((p) => ({ ...p, [current.id]: e.target.value }))} placeholder="Add review notes for this session" /></dd>
             </div>
 
-            <div className="tableWrap" style={{ marginTop: ".75rem" }}>
-              <table>
-                <thead><tr><th>Song / Work</th><th>Bounce</th><th>Lyrics</th><th>Writers/Splits</th></tr></thead>
-                <tbody>
-                  {currentSongs.length === 0 ? <tr><td colSpan={4} className="helper">No linked songs/works yet.</td></tr> : currentSongs.map((song) => {
-                    const hasBounce = Boolean(song.bounce_link) || currentAssets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "bounce" && Boolean(a.url));
-                    const hasLyrics = Boolean(song.lyrics_link) || currentAssets.some((a) => a.song_id === song.id && normalizeEvidenceType(a.type || "") === "lyrics" && Boolean(a.url));
-                    const writersForSong = currentSplits.filter((s) => s.song_id === song.id).map((s) => `${s.writer_name}${s.percentage !== null && s.percentage !== undefined ? ` (${s.percentage}%)` : ""}`);
-                    return <tr key={song.id}><td>{song.title || "Untitled"}</td><td>{hasBounce ? "Yes" : <span className="helper">Missing</span>}</td><td>{hasLyrics ? "Yes" : <span className="helper">Missing</span>}</td><td>{writersForSong.length ? writersForSong.join(", ") : <span className="helper">No writers yet</span>}</td></tr>;
-                  })}
-                </tbody>
-              </table>
-            </div>
-
             <div className="card" style={{ marginTop: ".75rem" }}>
-              <h3 style={{ color: "var(--text)", fontSize: ".95rem", marginBottom: ".45rem" }}>Evidence Checklist</h3>
-              <div className="grid" style={{ gap: ".3rem" }}>
-                <div>{evidence.bounceCount}/{evidence.totalSongs} Bounce linked</div>
-                <div>{evidence.lyricsCount}/{evidence.totalSongs} Lyrics linked</div>
-                <div>{evidence.writersCount > 0 ? "✓" : "○"} writers/attendees added</div>
-                <div>{evidence.hasSupporting ? "✓" : "○"} supporting evidence links exist</div>
+              <h3 style={{ color: "var(--text)", fontSize: ".95rem", marginBottom: ".45rem" }}>Evidence Strength Breakdown</h3>
+              <div className="rowActions compact" style={{ marginBottom: ".45rem" }}>
+                <span className="statusBadge">{evidence.bounceCount}/{evidence.totalSongs} Bounce</span>
+                <span className="statusBadge">{evidence.lyricsCount}/{evidence.totalSongs} Lyrics</span>
+                <span className="statusBadge">Strength: {evidence.level}</span>
               </div>
+              <p className="helper" style={{ marginBottom: ".35rem" }}>What contributes to stronger evidence:</p>
+              <ul style={{ paddingLeft: "1.1rem" }}>
+                {evidence.contributors.length ? evidence.contributors.map((c) => <li key={c}>{c}</li>) : <li>None yet</li>}
+              </ul>
+              <p className="helper" style={{ marginTop: ".45rem", marginBottom: ".35rem" }}>What is preventing stronger archive status:</p>
+              <ul style={{ paddingLeft: "1.1rem" }}>
+                {evidence.blockers.length ? evidence.blockers.map((b) => <li key={b}>{b}</li>) : <li>No major blockers.</li>}
+              </ul>
             </div>
 
-            <div className="card" style={{ marginTop: ".6rem" }}>
-              <h3 style={{ color: "var(--text)", fontSize: ".95rem", marginBottom: ".45rem" }}>Missing Evidence Warnings</h3>
-              {evidence.missing.length ? <div className="rowActions compact">{evidence.missing.map((m) => <span key={m} className="statusBadge amber">{m}</span>)}</div> : <p className="helper">No major evidence gaps detected.</p>}
-            </div>
+            <SectionCard title="Songs / Works" actions={<div className="rowActions compact"><input value={newSongTitle} onChange={(e) => setNewSongTitle(e.target.value)} placeholder="Add song/work title" style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addSong}>Add Song</button></div>}>
+              {currentSongs.length === 0 ? <p className="helper">No linked songs/works yet.</p> : (
+                <div className="tableWrap">
+                  <table>
+                    <thead><tr><th>Title</th><th>Bounce Link</th><th>Lyrics Link</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {currentSongs.map((song) => (
+                        <tr key={song.id}>
+                          <td><input value={song.title || ""} onChange={async (e) => updateSongField(song.id, { title: e.target.value })} /></td>
+                          <td><input value={song.bounce_link || ""} placeholder="https://..." onChange={async (e) => updateSongField(song.id, { bounce_link: e.target.value || null })} /></td>
+                          <td><input value={song.lyrics_link || ""} placeholder="https://..." onChange={async (e) => updateSongField(song.id, { lyrics_link: e.target.value || null })} /></td>
+                          <td><Link className="button compact" href={`/songs/${song.id}`}>Song Detail</Link></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </SectionCard>
 
-            <div className="card" style={{ marginTop: ".6rem" }}>
-              <h3 style={{ color: "var(--text)", fontSize: ".95rem", marginBottom: ".45rem" }}>Follow-up Actions</h3>
-              {currentActions.length ? <div className="tableWrap"><table><thead><tr><th>Due</th><th>Task</th><th>Status</th></tr></thead><tbody>{currentActions.map((a) => <tr key={a.id}><td>{a.due_date || <span className="helper">No date</span>}</td><td>{a.task}</td><td>{a.status}</td></tr>)}</tbody></table></div> : <p className="helper">No follow-ups yet.</p>}
+            <SectionCard title="Writers / Splits" actions={<div className="rowActions compact"><select value={splitSongId} onChange={(e) => setSplitSongId(e.target.value)} style={{ minWidth: 180 }}><option value="">Select song</option>{currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}</select><input list="writer-dir-archive" value={splitWriterName} onChange={(e) => setSplitWriterName(e.target.value)} placeholder="Writer name" style={{ minWidth: 180 }} /><input value={splitPct} onChange={(e) => setSplitPct(e.target.value)} placeholder="Split %" style={{ maxWidth: 90 }} /><button className="button primary compact" onClick={addSplit}>Add Writer/Split</button><datalist id="writer-dir-archive">{writers.map((w) => <option key={w.id} value={w.name} />)}</datalist></div>}>
+              {currentSplits.length === 0 ? <p className="helper">No writers/splits added yet.</p> : (
+                <div className="tableWrap"><table><thead><tr><th>Song</th><th>Writer</th><th>Split</th></tr></thead><tbody>{currentSplits.map((sp) => <tr key={sp.id}><td>{currentSongs.find((s) => s.id === sp.song_id)?.title || "Untitled"}</td><td>{sp.writer_name}</td><td>{sp.percentage ?? <span className="helper">auto</span>}</td></tr>)}</tbody></table></div>
+              )}
+            </SectionCard>
+
+            <SectionCard title="Evidence / Assets" actions={<div className="rowActions compact"><select value={newAssetSongId} onChange={(e) => setNewAssetSongId(e.target.value)} style={{ minWidth: 160 }}><option value="">Select song</option>{currentSongs.map((s) => <option key={s.id} value={s.id}>{s.title || "Untitled"}</option>)}</select><select value={newAssetType} onChange={(e) => setNewAssetType(e.target.value)} style={{ minWidth: 160 }}><option value="bounce">Bounce</option><option value="lyrics">Lyrics</option><option value="acapella">Acapella</option><option value="voice_note">Voice Note</option><option value="apple_note">Apple Note</option><option value="google_doc">Google Doc</option><option value="dropbox">Dropbox</option><option value="message_evidence">Email/Pitch Trail</option><option value="screenshots">Screenshots</option><option value="other">Other</option></select><input value={newAssetUrl} onChange={(e) => setNewAssetUrl(e.target.value)} placeholder="https://..." style={{ minWidth: 220 }} /><button className="button primary compact" onClick={addAsset}>Add Asset</button></div>}>
+              {currentAssets.length === 0 ? <p className="helper">No assets linked yet.</p> : (
+                <div className="tableWrap"><table><thead><tr><th>Song</th><th>Type</th><th>Link</th><th>Action</th></tr></thead><tbody>{currentAssets.map((a) => <tr key={a.id}><td>{currentSongs.find((s) => s.id === a.song_id)?.title || "Untitled"}</td><td>{a.type}</td><td>{a.url ? <a href={a.url} target="_blank" rel="noreferrer">Open</a> : <span className="helper">No link</span>}</td><td><button className="button compact" onClick={() => deleteAsset(a.id)}>Delete</button></td></tr>)}</tbody></table></div>
+              )}
+            </SectionCard>
+
+            <SectionCard title="Follow-up Actions">
+              {currentActions.length ? <div className="tableWrap"><table><thead><tr><th>Due</th><th>Task</th><th>Status</th></tr></thead><tbody>{currentActions.map((a) => <tr key={a.id}><td>{a.due_date || <span className="helper">No date</span>}</td><td>{a.task}</td><td><select value={a.status} onChange={(e) => updateActionStatus(a.id, e.target.value)}><option>Open</option><option>In Progress</option><option>Done</option></select></td></tr>)}</tbody></table></div> : <p className="helper">No follow-ups yet.</p>}
               <div className="rowActions compact" style={{ marginTop: ".5rem" }}>
                 <input value={followUpTask} onChange={(e) => setFollowUpTask(e.target.value)} placeholder="Add follow-up task" style={{ minWidth: 240 }} />
                 <input type="date" value={followUpDue} onChange={(e) => setFollowUpDue(e.target.value)} style={{ maxWidth: 180 }} />
+                <select value={followUpStatus} onChange={(e) => setFollowUpStatus(e.target.value)} style={{ maxWidth: 160 }}><option>Open</option><option>In Progress</option><option>Done</option></select>
               </div>
-            </div>
+            </SectionCard>
 
             <div className="rowActions" style={{ marginTop: ".85rem" }}>
               <button className="button" onClick={back} disabled={cursor === 0}>Back</button>
@@ -298,6 +483,7 @@ export default function ArchiveProgressPage() {
               <button className="button" onClick={() => saveCurrent()}>Save Progress</button>
               {saveMsg ? <span className="helper">{saveMsg}</span> : null}
             </div>
+            <p className="helper" style={{ marginTop: ".55rem" }}>Archive Reviewed means this session has been intentionally reviewed and outstanding items acknowledged, not necessarily fully complete.</p>
           </SectionCard>
         )
       ) : null}

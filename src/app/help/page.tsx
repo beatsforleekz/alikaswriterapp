@@ -40,7 +40,7 @@ export default function HelpPage() {
           <li><strong>Strong</strong>: bounce + lyrics and multiple corroborating items (writers/links/supporting material mostly in place).</li>
           <li><strong>Complete</strong>: admin/dispute-ready archive position with core evidence, writers/splits, and missing items resolved or tracked by follow-up.</li>
         </ul>
-        <p className="helper" style={{ marginTop: ".6rem" }}>Evidence Strength is auto-calculated from checklist coverage, but can be manually overridden when needed.</p>
+        <p className="helper" style={{ marginTop: ".6rem" }}>Evidence Strength is auto-calculated from checklist coverage and evidence/admin completeness in Archive Review workflow.</p>
         <p className="helper" style={{ marginTop: ".4rem" }}><strong>Apple Note Exists</strong> is useful even without a share link because note existence/history can still support evidence context.</p>
       </SectionCard>
       <SectionCard title="Recommended Backfill Workflow"><ul style={{ paddingLeft: "1.2rem" }}><li>Start recent-first.</li><li>Work backwards by year.</li><li>Prioritise commercially relevant songs first.</li><li>Recent sessions are easier to recover.</li><li>Calendar import can later fill gaps.</li><li>Use the Archive Review Tool in Archive Progress to review sessions chronologically by period.</li></ul></SectionCard>
