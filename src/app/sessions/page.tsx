@@ -136,6 +136,7 @@ export default function SessionsPage() {
   const [importMessage, setImportMessage] = useState("");
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [error, setError] = useState("");
+  const [sortBy, setSortBy] = useState<"az" | "date" | "recent">("recent");
   const initialized = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -221,6 +222,18 @@ export default function SessionsPage() {
     });
     return out;
   }, [rows, songs, assets]);
+
+  const sortedRows = useMemo(() => {
+    const next = [...rows];
+    if (sortBy === "az") {
+      next.sort((a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }));
+    } else if (sortBy === "date") {
+      next.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+    } else {
+      next.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+    }
+    return next;
+  }, [rows, sortBy]);
 
   const update = async (id: string, key: keyof Session, value: string | boolean) => {
     setError("");
@@ -326,16 +339,24 @@ export default function SessionsPage() {
 
             {error ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{error}</p> : null}
             {importMessage ? <p className="helper" style={{ marginBottom: ".7rem" }}>{importMessage}</p> : null}
+            <div className="rowActions compact" style={{ marginBottom: ".6rem" }}>
+              <label className="helper">Sort</label>
+              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "date" | "recent")} style={{ maxWidth: 180 }}>
+                <option value="az">A-Z</option>
+                <option value="date">Date</option>
+                <option value="recent">Most Recent</option>
+              </select>
+            </div>
             <p className="helper" style={{ marginBottom: ".6rem" }}>Archive Reviewed means you have checked this session for the key admin/evidence items you currently know about.</p>
 
-            {rows.length === 0 ? (
+            {sortedRows.length === 0 ? (
               <EmptyState title="No sessions yet" hint="Import a calendar file or add sessions manually." action={<><button className="button" onClick={() => fileInputRef.current?.click()}>Import Calendar</button><Link className="button primary" href="/sessions/new">Add Session</Link></>} />
             ) : (
               <div className="tableWrap">
                 <table>
                   <thead><tr><th>Date</th><th>Title</th><th>Location</th><th>Source</th><th>Archive Reviewed</th><th>Evidence Strength</th><th>Actions</th></tr></thead>
                   <tbody>
-                    {rows.map((se) => {
+                    {sortedRows.map((se) => {
                       const effective = effectiveStrengthBySession[se.id];
                       return (
                         <tr key={se.id}>

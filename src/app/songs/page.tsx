@@ -53,6 +53,7 @@ export default function SongsPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState("all");
+  const [sortBy, setSortBy] = useState<"az" | "date" | "recent">("recent");
   const [errorMsg, setErrorMsg] = useState("");
 
   const deleteSong = async (id: string) => {
@@ -124,6 +125,20 @@ export default function SongsPage() {
     });
   }, [rows, filter, assets, search, splits, songTags, tagFilter]);
 
+  const sortedFiltered = useMemo(() => {
+    const next = [...filtered];
+    if (sortBy === "az") {
+      next.sort((a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }));
+    } else if (sortBy === "date") {
+      const sessionDate = (song: SongWork) => sessions.find((s) => s.id === song.sessionId)?.date || "";
+      next.sort((a, b) => sessionDate(a).localeCompare(sessionDate(b)));
+    } else {
+      const sessionDate = (song: SongWork) => sessions.find((s) => s.id === song.sessionId)?.date || "";
+      next.sort((a, b) => sessionDate(b).localeCompare(sessionDate(a)));
+    }
+    return next;
+  }, [filtered, sortBy, sessions]);
+
   const exportCsv = () => {
     const header = ["Title", "Status", "Tags", "Writers", "Splits", "Session Date", "Evidence Strength", "Bounce", "Lyrics", "Audio Ready", "Notes"];
     const lines = [header.map(csvSafe).join(",")];
@@ -186,17 +201,23 @@ export default function SongsPage() {
         </select>
         <label>Search</label>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title, writer, status, tag" style={{ maxWidth: 280 }} />
+        <label>Sort</label>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "date" | "recent")} style={{ maxWidth: 180 }}>
+          <option value="az">A-Z</option>
+          <option value="date">Date</option>
+          <option value="recent">Most Recent</option>
+        </select>
       </FilterBar>
 
       <SectionCard>
-        {filtered.length === 0 ? (
+        {sortedFiltered.length === 0 ? (
           <EmptyState title="No songs/works yet" hint="Open a session to add songs and enrich catalogue records." action={<Link className="button primary" href="/sessions">Open Sessions</Link>} />
         ) : (
           <div className="tableWrap">
             <table>
               <thead><tr><th>Title</th><th>Status</th><th>Tags</th><th>Bounce</th><th>Lyrics</th><th>Writers</th><th>Session</th><th>Actions</th></tr></thead>
               <tbody>
-                {filtered.map((s) => {
+                {sortedFiltered.map((s) => {
                   const songAssets = assets.filter((a) => a.song_id === s.id);
                   const hasBounce = Boolean(s.bounceLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "bounce" && Boolean(a.url));
                   const hasLyrics = Boolean(s.lyricsLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "lyrics" && Boolean(a.url));

@@ -258,10 +258,15 @@ export default function NewSessionPage() {
             <select value={row.type} onChange={(e) => setEvidence((prev) => prev.map((r, i) => i === idx ? { ...r, type: e.target.value } : r))} style={{ minWidth: 140 }}>
               <option value="bounce">Bounce</option>
               <option value="lyrics">Lyrics</option>
+              <option value="instrumental">Instrumental</option>
               <option value="acapella">Acapella</option>
+              <option value="apple_note">Apple Note</option>
               <option value="dropbox">Dropbox</option>
               <option value="google_doc">Google Doc</option>
               <option value="voice_note">Voice note</option>
+              <option value="message_evidence">Email/Pitch Trail</option>
+              <option value="screenshots">Screenshots</option>
+              <option value="session_file">Session File</option>
               <option value="other">Other</option>
             </select>
             <input value={row.url} onChange={(e) => setEvidence((prev) => prev.map((r, i) => i === idx ? { ...r, url: e.target.value } : r))} placeholder="https://..." style={{ minWidth: 260, flex: 1 }} />
