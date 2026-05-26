@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 
 const links = [
   ["/", "Dashboard"],
-  ["/archive-progress", "Archive Progress"],
+  ["/archive-progress", "Archive Review"],
   ["/sessions", "Sessions"],
   ["/songs", "Songs / Works"],
   ["/cuts", "Cuts"],

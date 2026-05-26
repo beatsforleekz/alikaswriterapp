@@ -91,8 +91,7 @@ export default function Page() {
   const upcoming = [...activeActions].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
   const currentYear = new Date().getFullYear();
   const yearSessions = sessions.filter((s) => s.date.startsWith(String(currentYear)));
-  const yearSessionIds = new Set(yearSessions.map((s) => s.id));
-  const latestReviewEvent = reviewEvents.find((e) => yearSessionIds.has(e.session_id));
+  const latestReviewEvent = reviewEvents[0];
   const latestAudited = latestReviewEvent
     ? new Date(latestReviewEvent.created_at).toLocaleString(undefined, {
         year: "numeric",
@@ -103,6 +102,8 @@ export default function Page() {
       })
     : "";
   const sessionsNeedingEvidence = yearSessions.filter((s) => !s.evidence_strength || s.evidence_strength === "Weak" || s.evidence_strength === "Partial").length;
+  const totalReviewedAll = sessions.filter((s) => s.archive_reviewed === true).length;
+  const totalRemainingAll = sessions.length - totalReviewedAll;
   const weakPartialSessions = sessions.filter((s) => !s.evidence_strength || s.evidence_strength === "Weak" || s.evidence_strength === "Partial");
   const missingBounceSongs = songs.filter((s) => !hasBounceForSong(s.id, s.bounceLink));
   const missingLyricsSongs = songs.filter((s) => !hasLyricsForSong(s.id, s.lyricsLink));
@@ -116,21 +117,24 @@ export default function Page() {
     <div>
       <PageHeader title="Dashboard" subtitle="Archive command centre for your catalogue workflow." />
       <div className="grid cards">
-        <StatCard label="Total Sessions" value={sessions.length} />
-        <StatCard label="Total Songs / Works" value={songs.length} />
-        <StatCard label="Sessions with 0 Songs" value={sessionsWithNoSongs} />
-        <StatCard label="Sessions with 0 Bounce" value={sessionsWithNoBounce} />
-        <StatCard label="Songs Missing Bounce" value={missingBounce} />
-        <StatCard label="Songs Missing Lyrics" value={missingLyrics} />
-        <StatCard label="Cut / Released" value={cutReleased} />
-        <StatCard label="Disputed" value={disputed} />
+        <StatCard label="Total Sessions" value={sessions.length} tone="neutral" />
+        <StatCard label="Total Songs / Works" value={songs.length} tone="neutral" />
+        <StatCard label="Sessions with 0 Songs" value={sessionsWithNoSongs} tone={sessionsWithNoSongs > 0 ? "amber" : "success"} href="#warn-no-songs" />
+        <StatCard label="Sessions with 0 Bounce" value={sessionsWithNoBounce} tone={sessionsWithNoBounce > 0 ? "amber" : "success"} href="#warn-session-no-bounce" />
+        <StatCard label="Songs Missing Bounce" value={missingBounce} tone={missingBounce > 0 ? "danger" : "success"} href="#warn-missing-bounce" />
+        <StatCard label="Songs Missing Lyrics" value={missingLyrics} tone={missingLyrics > 0 ? "danger" : "success"} href="#warn-missing-lyrics" />
+        <StatCard label="Cut / Released" value={cutReleased} tone={cutReleased > 0 ? "success" : "neutral"} />
+        <StatCard label="Disputed" value={disputed} tone={disputed > 0 ? "danger" : "success"} href="#warn-disputed" />
       </div>
       <div className="section">
-      <SectionCard title="Archive Progress" actions={<Link className="button primary" href="/archive-progress">Quick Resume</Link>}>
+      <SectionCard title="Archive Review Snapshot" actions={<Link className="button primary" href="/archive-progress">Open Archive Review</Link>}>
         <div className="grid cards">
           <StatCard label="Current Active Year" value={currentYear} />
           <StatCard label="Latest Audited Date" value={latestAudited || <span className="helper">Not set</span>} />
           <StatCard label="Sessions Needing Evidence" value={sessionsNeedingEvidence} />
+          <StatCard label="Total Sessions In Library" value={sessions.length} />
+          <StatCard label="Reviewed (All Time)" value={totalReviewedAll} />
+          <StatCard label="Remaining (All Time)" value={totalRemainingAll} />
         </div>
       </SectionCard>
       </div>
@@ -147,23 +151,31 @@ export default function Page() {
 
       <div className="section">
       <SectionCard title="Actionable Warnings">
-        <details>
+        <details id="warn-no-songs">
+          <summary><span style={{ color: "#8a5f2b", fontWeight: 600 }}>Sessions with 0 Songs ({sessionsWithNoSongs})</span></summary>
+          <div className="tableWrap"><table><thead><tr><th>Date</th><th>Session</th><th>Open</th></tr></thead><tbody>{sessionsWithNoSongs === 0 ? <tr><td colSpan={3} className="helper">None</td></tr> : sessions.filter((se) => songs.every((song) => song.sessionId !== se.id)).map((se) => <tr key={se.id}><td>{se.date}</td><td>{se.title || "Untitled Session"}</td><td><Link className="button compact" href={`/sessions/${se.id}`}>Workspace</Link></td></tr>)}</tbody></table></div>
+        </details>
+        <details id="warn-session-no-bounce" style={{ marginTop: ".6rem" }}>
+          <summary><span style={{ color: "#8a5f2b", fontWeight: 600 }}>Sessions with 0 Bounce ({sessionsWithNoBounce})</span></summary>
+          <div className="tableWrap"><table><thead><tr><th>Date</th><th>Session</th><th>Open</th></tr></thead><tbody>{sessionsWithNoBounce === 0 ? <tr><td colSpan={3} className="helper">None</td></tr> : sessions.filter((se) => { const sessionSongs = songs.filter((song) => song.sessionId === se.id); if (sessionSongs.length === 0) return true; return sessionSongs.every((song) => !hasBounceForSong(song.id, song.bounceLink)); }).map((se) => <tr key={se.id}><td>{se.date}</td><td>{se.title || "Untitled Session"}</td><td><Link className="button compact" href={`/sessions/${se.id}`}>Workspace</Link></td></tr>)}</tbody></table></div>
+        </details>
+        <details id="warn-missing-bounce" style={{ marginTop: ".6rem" }}>
           <summary><span style={{ color: "#8a3d3d", fontWeight: 600 }}>Missing Bounce ({missingBounceSongs.length})</span></summary>
           <div className="tableWrap"><table><thead><tr><th>Song</th><th>Session</th><th>Status</th><th>Open</th></tr></thead><tbody>{missingBounceSongs.length === 0 ? <tr><td colSpan={4} className="helper">None</td></tr> : missingBounceSongs.map((s) => { const se = sessions.find((x) => x.id === s.sessionId); return <tr key={s.id}><td>{s.title || "Untitled Song"}</td><td>{se ? `${se.date} - ${se.title || "Untitled Session"}` : "Unlinked"}</td><td>{s.status}</td><td><Link className="button compact" href={`/songs/${s.id}`}>Song</Link></td></tr>; })}</tbody></table></div>
         </details>
-        <details style={{ marginTop: ".6rem" }}>
+        <details id="warn-missing-lyrics" style={{ marginTop: ".6rem" }}>
           <summary><span style={{ color: "#8a5f2b", fontWeight: 600 }}>Missing Lyrics ({missingLyricsSongs.length})</span></summary>
           <div className="tableWrap"><table><thead><tr><th>Song</th><th>Session</th><th>Status</th><th>Open</th></tr></thead><tbody>{missingLyricsSongs.length === 0 ? <tr><td colSpan={4} className="helper">None</td></tr> : missingLyricsSongs.map((s) => { const se = sessions.find((x) => x.id === s.sessionId); return <tr key={s.id}><td>{s.title || "Untitled Song"}</td><td>{se ? `${se.date} - ${se.title || "Untitled Session"}` : "Unlinked"}</td><td>{s.status}</td><td><Link className="button compact" href={`/songs/${s.id}`}>Song</Link></td></tr>; })}</tbody></table></div>
         </details>
-        <details style={{ marginTop: ".6rem" }}>
+        <details id="warn-weak-partial" style={{ marginTop: ".6rem" }}>
           <summary><span style={{ color: "#8a5f2b", fontWeight: 600 }}>Weak/Partial Evidence Sessions ({weakPartialSessions.length})</span></summary>
           <div className="tableWrap"><table><thead><tr><th>Date</th><th>Session</th><th>Evidence</th><th>Open</th></tr></thead><tbody>{weakPartialSessions.length === 0 ? <tr><td colSpan={4} className="helper">None</td></tr> : weakPartialSessions.map((s) => <tr key={s.id}><td>{s.date}</td><td>{s.title || "Untitled Session"}</td><td>{s.evidence_strength || "Not set"}</td><td><Link className="button compact" href={`/sessions/${s.id}`}>Workspace</Link></td></tr>)}</tbody></table></div>
         </details>
-        <details style={{ marginTop: ".6rem" }}>
+        <details id="warn-disputed" style={{ marginTop: ".6rem" }}>
           <summary><span style={{ color: "#8a3d3d", fontWeight: 600 }}>Disputed Songs ({disputedSongs.length})</span></summary>
           <div className="tableWrap"><table><thead><tr><th>Song</th><th>Session</th><th>Open</th></tr></thead><tbody>{disputedSongs.length === 0 ? <tr><td colSpan={3} className="helper">None</td></tr> : disputedSongs.map((s) => { const se = sessions.find((x) => x.id === s.sessionId); return <tr key={s.id}><td>{s.title || "Untitled Song"}</td><td>{se ? `${se.date} - ${se.title || "Untitled Session"}` : "Unlinked"}</td><td><Link className="button compact" href={`/songs/${s.id}`}>Song</Link></td></tr>; })}</tbody></table></div>
         </details>
-        <details style={{ marginTop: ".6rem" }}>
+        <details id="warn-playlist-responses" style={{ marginTop: ".6rem" }}>
           <summary><span style={{ color: "#5f6b74", fontWeight: 600 }}>Playlist Responses ({responseCount})</span></summary>
           <div className="tableWrap"><table><thead><tr><th>When</th><th>Playlist</th><th>Song</th><th>Response</th><th>Sender</th><th>Open</th></tr></thead><tbody>{playlistResponses.length === 0 ? <tr><td colSpan={6} className="helper">No responses yet.</td></tr> : playlistResponses.map((r) => { const tr = r.playlist_track_id ? trackById.get(r.playlist_track_id) : undefined; const song = tr ? songById.get(tr.song_work_id) : undefined; return <tr key={r.id}><td>{new Date(r.created_at).toLocaleDateString()}</td><td>{playlistTitleById.get(r.playlist_id) || "Playlist"}</td><td>{song?.title || "Unknown song"}</td><td>{r.response_type}</td><td>{r.sender_name || <span className="helper">Unknown</span>}</td><td>{r.playlist_id ? <Link className="button compact" href={`/playlists/${r.playlist_id}`}>Playlist</Link> : <span className="helper">-</span>}</td></tr>; })}</tbody></table></div>
         </details>

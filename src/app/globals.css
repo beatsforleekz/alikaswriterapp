@@ -72,6 +72,11 @@ textarea { min-height: 92px; }
 .sectionCardHead { display: flex; justify-content: space-between; align-items: center; gap: .8rem; margin-bottom: .7rem; }
 
 .statCard { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: .95rem; box-shadow: var(--shadow); }
+.statCard.clickable { cursor: pointer; transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+.statCard.clickable:hover { transform: translateY(-1px); border-color: #c8b29d; box-shadow: 0 10px 20px rgba(59, 44, 35, 0.12); }
+.statCard.danger { background: #f9ecec; border-color: #e8c7c7; }
+.statCard.amber { background: #fbf2e6; border-color: #e8d5b5; }
+.statCard.success { background: #eef6ef; border-color: #cde1cf; }
 .statLabel { color: var(--muted); font-size: .84rem; margin-bottom: .32rem; }
 .statValue { font-size: 1.45rem; font-weight: 600; font-family: "Avenir Next", "Segoe UI", Arial, sans-serif; }
 
@@ -99,6 +104,46 @@ tr:hover td { background: #f8f2ec; }
 .statusBadge.latte { background:#f4eee8; color:#6a5648; }
 .statusBadge.sand { background:#f6f1ea; color:#6d5c4e; }
 .statusBadge.coffee { background:#ede8e4; color:#5a4f47; }
+.targetChip {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: .28rem .6rem .28rem .42rem;
+  background: #f8f2ec;
+  color: #5f4f43;
+  cursor: pointer;
+  user-select: none;
+}
+.targetChip input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.targetChipCheck {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid #d6c4b3;
+  background: #fff8f2;
+  color: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .7rem;
+  line-height: 1;
+}
+.targetChip.selected {
+  border-color: #b79052;
+  background: #f5e9da;
+  color: #3b2c23;
+}
+.targetChip.selected .targetChipCheck {
+  border-color: #9c7a45;
+  background: #b79052;
+  color: #fff8ef;
+}
 
 .emptyState { border: 1px dashed #d4c3b2; border-radius: 14px; padding: 1rem; text-align: center; background: #f9f3ee; }
 .emptyTitle { font-weight: 600; margin-bottom: .25rem; }

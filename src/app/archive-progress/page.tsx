@@ -24,7 +24,7 @@ type SplitLite = { id: string; song_id: string; writer_id: string; writer_name: 
 type WriterLite = { id: string; name: string };
 type ActionLite = { id: string; session_id?: string | null; due_date?: string | null; task: string; status: string; created_at?: string | null };
 
-type ReviewFilter = "not-reviewed" | "all";
+type ReviewFilter = "needs-review" | "all";
 const years = [2026, 2025, 2024, 2023, 2022, 2021];
 
 function normalizeEvidenceType(raw: string) {
@@ -126,7 +126,7 @@ export default function ArchiveProgressPage() {
   const [year, setYear] = useState<number>(years[0]);
   const [startDate, setStartDate] = useState<string>(`${years[0]}-01-01`);
   const [endDate, setEndDate] = useState<string>(`${years[0]}-12-31`);
-  const [filter, setFilter] = useState<ReviewFilter>("not-reviewed");
+  const [filter, setFilter] = useState<ReviewFilter>("needs-review");
   const [inReview, setInReview] = useState(false);
   const [cursor, setCursor] = useState(0);
 
@@ -188,13 +188,19 @@ export default function ArchiveProgressPage() {
 
   const filteredSessions = useMemo(() => periodSessions
     .filter((s) => {
-      if (filter !== "not-reviewed") return true;
-      if (!s.archive_reviewed) return true;
+      if (filter !== "needs-review") return true;
+      const sessionSongs = songs.filter((x) => String(x.session_id || "") === s.id);
+      const songIds = new Set(sessionSongs.map((x) => x.id));
+      const sessionAssets = assets.filter((a) => songIds.has(String(a.song_id)));
+      const sessionSplits = splits.filter((sp) => songIds.has(String(sp.song_id)));
       const sessionActions = actions.filter((a) => String(a.session_id || "") === s.id);
+      const level = calcEvidence(s, sessionSongs, sessionAssets, sessionSplits, sessionActions).level;
       const openStatuses = new Set(["open", "in progress", "pending", "todo"]);
-      return sessionActions.some((a) => openStatuses.has(String(a.status || "").toLowerCase().trim()));
+      const hasOpenFollowUp = sessionActions.some((a) => openStatuses.has(String(a.status || "").toLowerCase().trim()));
+      const notStrongEnough = !["Strong", "Complete"].includes(level);
+      return s.archive_reviewed !== true || hasOpenFollowUp || notStrongEnough;
     })
-    .sort((a, b) => a.date.localeCompare(b.date)), [periodSessions, actions, filter]);
+    .sort((a, b) => a.date.localeCompare(b.date)), [periodSessions, songs, assets, splits, actions, filter]);
 
   const current = filteredSessions[cursor] ?? null;
   const currentSongs = useMemo(() => songs.filter((s) => String(s.session_id || "") === String(current?.id || "")), [songs, current?.id]);
@@ -244,7 +250,7 @@ export default function ArchiveProgressPage() {
       evidence_strength: auto.level,
       apple_note_exists: appleNoteExists,
     };
-    patch.archive_reviewed = typeof markReviewed === "boolean" ? markReviewed : true;
+    if (typeof markReviewed === "boolean") patch.archive_reviewed = markReviewed;
 
     const wasReviewed = Boolean(current.archive_reviewed);
     const ok = await patchSession(current.id, patch);
@@ -278,13 +284,6 @@ export default function ArchiveProgressPage() {
         setFollowUpStatus("Open");
       }
     }
-
-    await supabase.from("archive_progress").upsert({
-      year,
-      archive_reviewed_up_to: current.date || null,
-      last_audited_session_date: current.date || null,
-      notes: `Guided review in progress (${startDate} to ${endDate}, filter: ${filter}).`,
-    }, { onConflict: "year" });
 
     await load();
     setSaveMsg("Progress saved.");
@@ -583,11 +582,11 @@ export default function ArchiveProgressPage() {
           <div><label className="helper">Year</label><select value={year} onChange={(e) => { const y = Number(e.target.value); setYear(y); setStartDate(`${y}-01-01`); setEndDate(`${y}-12-31`); }}>{years.map((y) => <option key={y} value={y}>{y}</option>)}</select></div>
           <div><label className="helper">Start date</label><input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></div>
           <div><label className="helper">End date</label><input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></div>
-          <div><label className="helper">Status filter</label><select value={filter} onChange={(e) => setFilter(e.target.value as ReviewFilter)}><option value="not-reviewed">Not reviewed only</option><option value="all">All sessions</option></select></div>
+          <div><label className="helper">Status filter</label><select value={filter} onChange={(e) => setFilter(e.target.value as ReviewFilter)}><option value="needs-review">Needs Review Only</option><option value="all">All sessions</option></select></div>
         </div>
         <div className="rowActions" style={{ marginTop: ".75rem" }}>
           <button className="button primary" onClick={startReview}>Start Review</button>
-          <span className="helper">{periodSessions.length} sessions in selected period</span>
+          <span className="helper">{filteredSessions.length} sessions match filter ({periodSessions.length} total in period)</span>
         </div>
       </SectionCard>
 
@@ -615,6 +614,9 @@ export default function ArchiveProgressPage() {
             <div className="rowActions" style={{ justifyContent: "space-between", marginBottom: ".55rem" }}>
               <strong>Session {cursor + 1} of {filteredSessions.length}</strong>
               <span className="helper">Reviewed: {reviewedCount} · Remaining: {remainingCount}</span>
+            </div>
+            <div className="rowActions" style={{ marginBottom: ".55rem" }}>
+              <button className="button compact" onClick={() => { next(); scrollReviewTop(); }} disabled={cursor >= filteredSessions.length - 1}>Next</button>
             </div>
             <div className="progressBar" style={{ marginBottom: ".8rem" }}><span style={{ width: `${progressPct}%` }} /></div>
 
@@ -675,15 +677,15 @@ export default function ArchiveProgressPage() {
               {copyFromSongId ? (
                 <div className="rowActions compact" style={{ marginBottom: ".6rem", flexWrap: "wrap" }}>
                   {currentSongs.filter((s) => s.id !== copyFromSongId).map((s) => (
-                    <label key={s.id} className="statusBadge" style={{ cursor: "pointer" }}>
+                    <label key={s.id} className={`targetChip ${copyTargetSongIds.includes(s.id) ? "selected" : ""}`}>
                       <input
                         type="checkbox"
                         checked={copyTargetSongIds.includes(s.id)}
                         onChange={(e) => {
                           setCopyTargetSongIds((prev) => e.target.checked ? [...prev, s.id] : prev.filter((id) => id !== s.id));
                         }}
-                        style={{ marginRight: ".35rem" }}
                       />
+                      <span className="targetChipCheck" aria-hidden="true">✓</span>
                       {s.title || "Untitled"}
                     </label>
                   ))}
