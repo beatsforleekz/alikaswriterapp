@@ -298,6 +298,18 @@ export default function ArchiveProgressPage() {
 
   const addAsset = async () => {
     if (!newAssetSongId || !newAssetType || !newAssetUrl.trim()) return;
+    const normalizedType = normalizeEvidenceType(newAssetType);
+    const normalizedUrl = newAssetUrl.trim();
+    const exists = currentAssets.some((a) =>
+      String(a.song_id) === String(newAssetSongId)
+      && normalizeEvidenceType(a.type || "") === normalizedType
+      && String(a.url || "").trim() === normalizedUrl,
+    );
+    if (exists) {
+      setSaveMsg("That evidence link is already added for this song.");
+      window.setTimeout(() => setSaveMsg(""), 1400);
+      return;
+    }
     const { error } = await supabase.from("asset_links").insert({ song_id: newAssetSongId, type: newAssetType, url: newAssetUrl.trim() });
     if (error) {
       logSupabaseError("Failed to add asset in archive review", error);
