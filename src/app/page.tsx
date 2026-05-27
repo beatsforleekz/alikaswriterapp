@@ -179,6 +179,15 @@ export default function Page() {
   return (
     <div>
       <PageHeader title="Dashboard" subtitle="Archive command centre for your catalogue workflow." />
+      <SectionCard title="At a Glance">
+        <div className="grid cards">
+          <StatCard label="Total Sessions" value={sessions.length} tone="neutral" />
+          <StatCard label="Total Songs / Works" value={songs.length} tone="neutral" />
+          <StatCard label="Pitch-Ready Songs" value={pitchReadyCount} tone={pitchReadyCount ? "success" : "neutral"} href="/songs" />
+          <StatCard label="Archive Completeness %" value={archiveCompletenessPct} tone={archiveCompletenessPct >= 70 ? "success" : archiveCompletenessPct >= 40 ? "amber" : "danger"} href="/archive-progress" />
+        </div>
+      </SectionCard>
+      <div className="section">
       <SectionCard title="What Matters" actions={<Link className="button primary" href={overdueActions.length ? "/actions" : holdInterestedResponses.length ? "/playlists" : "/archive-progress"}>{overdueActions.length ? "Handle Overdue Actions" : holdInterestedResponses.length ? "Review Playlist Responses" : "Open Archive Review"}</Link>}>
         <div className="grid cards">
           <StatCard label="Hold/Interested Responses" value={holdInterestedResponses.length} tone={holdInterestedResponses.length ? "amber" : "success"} href="/playlists" />
@@ -190,6 +199,7 @@ export default function Page() {
           {topBlockerSongs.length ? topBlockerSongs.map((r) => <Link key={r.id} className="button compact" href={r.href}>{r.title}: {r.status}</Link>) : <span className="helper">No high-priority pitch blockers.</span>}
         </div>
       </SectionCard>
+      </div>
       <div className="section">
       <SectionCard title="What’s Missing" actions={<Link className="button" href="/archive-progress">Resolve In Archive Review</Link>}>
         <div className="grid cards">
