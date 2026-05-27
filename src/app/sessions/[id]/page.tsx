@@ -75,6 +75,8 @@ export default function SessionDetailPage() {
   const [writerRole, setWriterRole] = useState<string>("Songwriter");
   const [writerRoleCustom, setWriterRoleCustom] = useState("");
   const [writerSplitInput, setWriterSplitInput] = useState("");
+  const [duplicateSourceSongId, setDuplicateSourceSongId] = useState("");
+  const [duplicateTargetSongIds, setDuplicateTargetSongIds] = useState<string[]>([]);
   const [splitDrafts, setSplitDrafts] = useState<Record<string, { role: string; split: string }>>({});
   const [audioFileBySong, setAudioFileBySong] = useState<Record<string, File | null>>({});
   const [audioUploadStateBySong, setAudioUploadStateBySong] = useState<Record<string, "idle" | "ready" | "uploading" | "saved" | "error">>({});
@@ -695,6 +697,53 @@ export default function SessionDetailPage() {
     await load();
   };
 
+  const duplicateSplitsToSelectedSongs = async () => {
+    if (!duplicateSourceSongId) {
+      setErrorMsg("Select a source song to duplicate splits from.");
+      return;
+    }
+    if (!duplicateTargetSongIds.length) {
+      setErrorMsg("Select at least one target song.");
+      return;
+    }
+
+    const sourceRows = splitRows.filter((row) => row.song_id === duplicateSourceSongId);
+    if (!sourceRows.length) {
+      setErrorMsg("Selected source song has no writer/split rows yet.");
+      return;
+    }
+
+    for (const targetSongId of duplicateTargetSongIds) {
+      if (targetSongId === duplicateSourceSongId) continue;
+      for (const row of sourceRows) {
+        const alreadyExists = splitRows.some(
+          (existing) =>
+            existing.song_id === targetSongId &&
+            existing.writer_id === row.writer_id &&
+            String(existing.role || "") === String(row.role || "") &&
+            Number(existing.percentage ?? 0) === Number(row.percentage ?? 0),
+        );
+        if (alreadyExists) continue;
+
+        const { error } = await supabase.from("song_writer_splits").insert({
+          song_id: targetSongId,
+          writer_id: row.writer_id,
+          role: row.role || null,
+          percentage: row.percentage ?? null,
+        });
+        if (error) {
+          logSupabaseError("Failed to duplicate writer split across selected songs", error);
+          setErrorMsg(supabaseUserMessage("Could not duplicate splits across selected songs", error));
+          return;
+        }
+      }
+      await promptIfSplitTotalNotHundred(targetSongId);
+    }
+
+    setDuplicateTargetSongIds([]);
+    await load();
+  };
+
   const updateArchiveField = async (key: "archive_reviewed" | "archive_review_notes" | "evidence_strength" | "apple_note_exists" | "evidence_strength_override", value: string | boolean) => {
     const priorValue = session ? String(session[key] ?? "") : "";
     setArchiveSaveState("saving");
@@ -804,6 +853,35 @@ export default function SessionDetailPage() {
             <input value={writerRoleCustom} onChange={(e) => setWriterRoleCustom(e.target.value)} placeholder="Custom role" style={{ minWidth: 150 }} />
           ) : null}
           <input value={writerSplitInput} onChange={(e) => setWriterSplitInput(e.target.value)} placeholder="Split %" style={{ maxWidth: 100 }} />
+        </div>
+        <div className="rowActions compact" style={{ marginBottom: ".7rem", alignItems: "end", flexWrap: "wrap" }}>
+          <select value={duplicateSourceSongId} onChange={(e) => setDuplicateSourceSongId(e.target.value)} style={{ minWidth: 220 }}>
+            <option value="">Duplicate splits from…</option>
+            {songs.map((song) => <option key={`dup-source-${song.id}`} value={song.id}>{song.title || "Untitled"}</option>)}
+          </select>
+          <div className="rowActions compact" style={{ flexWrap: "wrap" }}>
+            {songs
+              .filter((song) => song.id !== duplicateSourceSongId)
+              .map((song) => {
+                const selected = duplicateTargetSongIds.includes(song.id);
+                return (
+                  <button
+                    key={`dup-target-${song.id}`}
+                    type="button"
+                    className={`targetChip ${selected ? "selected" : ""}`}
+                    onClick={() =>
+                      setDuplicateTargetSongIds((prev) =>
+                        prev.includes(song.id) ? prev.filter((id) => id !== song.id) : [...prev, song.id],
+                      )
+                    }
+                  >
+                    <span className="targetChipCheck">✓</span>
+                    <span>{song.title || "Untitled"}</span>
+                  </button>
+                );
+              })}
+          </div>
+          <button className="button compact" onClick={duplicateSplitsToSelectedSongs}>Duplicate to Selected Songs</button>
         </div>
         <WriterSplitPanel
           rows={splitRows.map((row) => ({
