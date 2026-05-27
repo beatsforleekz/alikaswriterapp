@@ -81,18 +81,6 @@ export default function WriterSplitPanel({
               </tbody>
             </table>
           </div>
-          <div className="mobileOnly mobileCardList">
-            {rows.map((row) => (
-              <div key={`mobile-split-${row.id}`} className="mobileDataCard">
-                <h4>{row.song_title || "Untitled"}</h4>
-                <p className="helper">{row.writer_name} · {row.role || "No role"} · {row.percentage ?? "auto"}%</p>
-                <div className="rowActions compact" style={{ marginTop: ".4rem" }}>
-                  {onEdit ? <button className="button compact" onClick={() => onEdit(row.id)}>Edit</button> : null}
-                  {onDelete ? <button className="button compact" onClick={() => onDelete(row.id)}>Delete</button> : null}
-                </div>
-              </div>
-            ))}
-          </div>
         </>
       )}
     </div>
