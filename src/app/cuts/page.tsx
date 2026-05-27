@@ -16,10 +16,53 @@ const mapCut = (r: Record<string, unknown>): CutRecord => ({
   releaseDate: r.release_date ? String(r.release_date) : undefined,
 });
 
+const CUTS_PLAYLIST_KEY = "cuts_playlist_reference_v1";
+
+function extractEmbedUrl(raw: string) {
+  const input = raw.trim();
+  if (!input) return "";
+  const srcMatch = input.match(/src=["']([^"']+)["']/i);
+  const candidate = (srcMatch?.[1] || input).trim();
+  try {
+    const parsed = new URL(candidate);
+    const host = parsed.hostname.toLowerCase();
+    if (host.includes("open.spotify.com") && parsed.pathname.includes("/playlist/")) {
+      const playlistId = parsed.pathname.split("/playlist/")[1]?.split("?")[0];
+      return playlistId ? `https://open.spotify.com/embed/playlist/${playlistId}` : "";
+    }
+    if (host.includes("w.soundcloud.com") && parsed.pathname.includes("/player")) return parsed.toString();
+    if (host.includes("soundcloud.com")) return `https://w.soundcloud.com/player/?url=${encodeURIComponent(parsed.toString())}`;
+    if (host.includes("youtube.com") || host.includes("youtu.be")) {
+      const videoId = host.includes("youtu.be")
+        ? parsed.pathname.replace("/", "")
+        : (parsed.searchParams.get("v") || (parsed.pathname.includes("/embed/") ? parsed.pathname.split("/embed/")[1] : ""));
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : "";
+    }
+    if (host.includes("music.apple.com")) return parsed.toString();
+    return "";
+  } catch {
+    return "";
+  }
+}
+
 export default function CutsPage() {
   const [rows, setRows] = useState<CutRecord[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
+  const [playlistInput, setPlaylistInput] = useState("");
+  const [savedPlaylistRef, setSavedPlaylistRef] = useState("");
+
+  const embedUrl = extractEmbedUrl(savedPlaylistRef);
+  const fallbackUrl = (() => {
+    if (!savedPlaylistRef.trim()) return "";
+    const srcMatch = savedPlaylistRef.match(/src=["']([^"']+)["']/i);
+    const candidate = (srcMatch?.[1] || savedPlaylistRef).trim();
+    try {
+      return new URL(candidate).toString();
+    } catch {
+      return "";
+    }
+  })();
 
   const load = async () => {
     const { data, error } = await supabase.from("cut_records").select("*").order("created_at", { ascending: false });
@@ -31,6 +74,11 @@ export default function CutsPage() {
     setRows((data ?? []).map((r) => mapCut(r as Record<string, unknown>)));
   };
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    const saved = window.localStorage.getItem(CUTS_PLAYLIST_KEY) || "";
+    setSavedPlaylistRef(saved);
+    setPlaylistInput(saved);
+  }, []);
 
   const addRow = async () => {
     setErrorMsg("");
@@ -52,11 +100,50 @@ export default function CutsPage() {
     }
   };
   const del = async (id: string) => { if (!window.confirm("Delete this cut record?")) return; const { error } = await supabase.from("cut_records").delete().eq("id", id); if (error) { logSupabaseError("Failed to delete cut", error); setErrorMsg(supabaseUserMessage("Could not delete cut record", error)); return; } setRows((r) => r.filter((x) => x.id !== id)); };
+  const savePlaylistRef = () => {
+    const next = playlistInput.trim();
+    window.localStorage.setItem(CUTS_PLAYLIST_KEY, next);
+    setSavedPlaylistRef(next);
+  };
+  const removePlaylistRef = () => {
+    window.localStorage.removeItem(CUTS_PLAYLIST_KEY);
+    setSavedPlaylistRef("");
+    setPlaylistInput("");
+  };
 
   return (
     <div>
       <PageHeader title="Cuts" subtitle="Commercial release tracking with understated, auditable detail." actions={<button className="button primary" onClick={addRow}>Add Cut Record</button>} />
       {errorMsg ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{errorMsg}</p> : null}
+
+      <SectionCard title="Writer Playlist / Reference Playlist">
+        <p className="helper" style={{ marginBottom: ".55rem" }}>Embed a Spotify, SoundCloud, Apple Music, YouTube or other playlist here to assist with cut tracking.</p>
+        <textarea value={playlistInput} onChange={(e) => setPlaylistInput(e.target.value)} placeholder="Paste playlist URL or embed code" />
+        <div className="rowActions compact" style={{ marginTop: ".55rem" }}>
+          <button className="button primary compact" onClick={savePlaylistRef}>Save Playlist Reference</button>
+          <button className="button compact" onClick={removePlaylistRef} disabled={!savedPlaylistRef}>Remove</button>
+        </div>
+        {savedPlaylistRef ? (
+          <div style={{ marginTop: ".75rem" }}>
+            {embedUrl ? (
+              <iframe
+                title="Cuts playlist reference"
+                src={embedUrl}
+                width="100%"
+                height="340"
+                style={{ border: "1px solid var(--line)", borderRadius: "12px", background: "#fff" }}
+                allow="autoplay; encrypted-media; picture-in-picture"
+                loading="lazy"
+              />
+            ) : fallbackUrl ? (
+              <p className="helper">Saved. Embed preview unavailable for this format. Open your saved playlist link: <a href={fallbackUrl} target="_blank" rel="noreferrer">Open playlist</a></p>
+            ) : (
+              <p className="helper">Saved. Could not parse a valid URL from this embed snippet yet.</p>
+            )}
+          </div>
+        ) : null}
+      </SectionCard>
+
       <SectionCard>
         {rows.length===0 ? <EmptyState title="No cut records yet" hint="Add a cut once a song is commercially active." action={<button className="button primary" onClick={addRow}>Add Cut Record</button>} /> : (
           <div className="tableWrap"><table><thead><tr><th>Song ID</th><th>Artist</th><th>Release Title</th><th>Release Date</th><th>Actions</th></tr></thead><tbody>{rows.map((c)=><tr key={c.id}><td>{editingId===c.id ? <input value={c.songId} onChange={(e)=>update(c.id,"songId",e.target.value)} /> : (c.songId || <span className="helper">Link song</span>)}</td><td>{editingId===c.id ? <input value={c.artist || ""} onChange={(e)=>update(c.id,"artist",e.target.value)} /> : (c.artist || <span className="helper">Add artist</span>)}</td><td>{editingId===c.id ? <input value={c.releaseTitle || ""} onChange={(e)=>update(c.id,"releaseTitle",e.target.value)} /> : (c.releaseTitle || <span className="helper">Add release</span>)}</td><td>{editingId===c.id ? <input type="date" value={c.releaseDate || ""} onChange={(e)=>update(c.id,"releaseDate",e.target.value)} /> : (c.releaseDate || <span className="helper">Add date</span>)}</td><td className="rowActions"><button className="button" onClick={()=>setEditingId(editingId===c.id ? null : c.id)}>{editingId===c.id ? "Save" : "Edit"}</button><button className="button" onClick={()=>del(c.id)}>Delete</button></td></tr>)}</tbody></table></div>

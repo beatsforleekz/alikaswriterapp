@@ -206,9 +206,10 @@ export default function Page() {
           <StatCard label="Songs Missing Bounce" value={missingBounce} tone={missingBounce ? "danger" : "success"} href="/songs?filter=no-bounce" />
           <StatCard label="Songs Missing Lyrics" value={missingLyrics} tone={missingLyrics ? "danger" : "success"} href="/songs?filter=no-lyrics" />
           <StatCard label="Unresolved Splits" value={unresolvedSplitSongs.length} tone={unresolvedSplitSongs.length ? "amber" : "success"} href="/songs" />
-          <StatCard label="Weak/Partial Evidence" value={weakEvidenceSessions.length} tone={weakEvidenceSessions.length ? "amber" : "success"} href="/archive-progress" />
+          <StatCard label="Sessions Missing Songs" value={sessionsWithNoSongs} tone={sessionsWithNoSongs ? "amber" : "success"} href="/sessions" />
           <StatCard label="Sessions Not Reviewed" value={sessionsNotReviewed.length} tone={sessionsNotReviewed.length ? "amber" : "success"} href="/archive-progress" />
           <StatCard label="Pitch-Ready Blockers" value={pitchReadyBlockers} tone={pitchReadyBlockers ? "danger" : "success"} href="/songs" />
+          <StatCard label="Weak/Partial Evidence" value={weakEvidenceSessions.length} tone={weakEvidenceSessions.length ? "amber" : "success"} href="/archive-progress" />
         </div>
         <div className="rowActions compact" style={{ marginTop: ".65rem", flexWrap: "wrap" }}>
           {sessionsNotReviewed.slice(0, 4).map((s) => <Link key={s.id} className="button compact" href={`/sessions/${s.id}`}>{s.date} {s.title || "Untitled"}</Link>)}
