@@ -187,6 +187,17 @@ tr:hover td { background: #f8f2ec; }
   .mobileOnly { display: block; }
   .desktopOnly { display: none; }
   .tableWrap table { min-width: 620px; }
+  .button, button {
+    padding: .42rem .62rem;
+    border-radius: 10px;
+    font-size: .88rem;
+    line-height: 1.1;
+  }
+  .button.compact, button.compact {
+    padding: .28rem .5rem;
+    border-radius: 8px;
+    font-size: .78rem;
+  }
 }
 
 .pitchPage {
@@ -646,4 +657,20 @@ tr:hover td { background: #f8f2ec; }
     justify-content: flex-start;
     flex-wrap: wrap;
   }
+}
+
+.progressGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: .65rem; }
+.progressTile { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: .8rem; box-shadow: var(--shadow); }
+.progressTile strong { font-size: 1.35rem; }
+.goalBoard {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: .75rem;
+}
+.goalCard {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: .8rem;
+  box-shadow: var(--shadow);
 }
