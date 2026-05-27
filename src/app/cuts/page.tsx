@@ -117,7 +117,7 @@ export default function CutsPage() {
     const options = ((songRes.data ?? []) as Array<{ id: string; title?: string | null }>).map((s) => ({ id: String(s.id), title: String(s.title ?? "Untitled Song") }));
     setSongOptions(options);
     setSongTitleById(Object.fromEntries(options.map((s) => [s.id, s.title])));
-    setNewCutSongId((prev) => prev || options[0]?.id || "");
+    setNewCutSongId("");
   };
 
   useEffect(() => { load(); }, []);
