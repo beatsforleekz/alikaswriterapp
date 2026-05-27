@@ -30,6 +30,56 @@ export default function EvidenceHub({
   onEditType?: (id: string, nextType: string) => void;
   onEditUrl?: (id: string, nextUrl: string) => void;
 }) {
+  const bounces = assets.filter((a) => evidenceTypeLabel(a.type) === "Bounce");
+  const lyrics = assets.filter((a) => evidenceTypeLabel(a.type) === "Lyrics");
+  const otherEvidence = assets.filter((a) => {
+    const label = evidenceTypeLabel(a.type);
+    return label !== "Bounce" && label !== "Lyrics";
+  });
+
+  const renderAssetList = (sectionAssets: AssetRef[]) => {
+    if (!sectionAssets.length) return <p className="helper">None yet.</p>;
+    return (
+      <>
+        <div className="tableWrap desktopOnly">
+          <table>
+            <thead><tr><th>Song</th><th>Type</th><th>Link</th><th>Actions</th></tr></thead>
+            <tbody>
+              {sectionAssets.map((asset) => (
+                <tr key={asset.id}>
+                  <td>{songs.find((s) => s.id === asset.song_id)?.title || "Untitled"}</td>
+                  <td>{evidenceTypeLabel(asset.type)}</td>
+                  <td>{asset.url ? <a href={asset.url} target="_blank" rel="noreferrer">Open</a> : <span className="helper">No link</span>}</td>
+                  <td>
+                    <div className="rowActions compact">
+                      {onEditType ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence type", asset.type); if (next !== null) onEditType(asset.id, next); }}>Edit Type</button> : null}
+                      {onEditUrl ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence link", asset.url || ""); if (next !== null) onEditUrl(asset.id, next); }}>Edit Link</button> : null}
+                      {onDelete ? <button className="button compact" onClick={() => onDelete(asset.id)}>Delete</button> : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="mobileOnly mobileCardList">
+          {sectionAssets.map((asset) => (
+            <div key={`mobile-evidence-${asset.id}`} className="mobileDataCard">
+              <h4>{songs.find((s) => s.id === asset.song_id)?.title || "Untitled"}</h4>
+              <p className="helper">{evidenceTypeLabel(asset.type)}</p>
+              <div className="rowActions compact" style={{ marginTop: ".35rem" }}>
+                {asset.url ? <a className="button compact" href={asset.url} target="_blank" rel="noreferrer">Open</a> : <span className="helper">No link</span>}
+                {onEditType ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence type", asset.type); if (next !== null) onEditType(asset.id, next); }}>Type</button> : null}
+                {onEditUrl ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence link", asset.url || ""); if (next !== null) onEditUrl(asset.id, next); }}>Link</button> : null}
+                {onDelete ? <button className="button compact" onClick={() => onDelete(asset.id)}>Delete</button> : null}
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  };
+
   const summary = summarizeMissingEvidence(
     songs.map((s) => ({ id: s.id, title: s.title || "" })),
     assets.map((a) => ({ id: a.id, song_id: a.song_id, type: a.type, url: a.url })),
@@ -62,43 +112,20 @@ export default function EvidenceHub({
       ) : null}
 
       {assets.length === 0 ? <p className="helper">No evidence linked yet.</p> : (
-        <>
-          <div className="tableWrap desktopOnly">
-            <table>
-            <thead><tr><th>Song</th><th>Type</th><th>Link</th><th>Actions</th></tr></thead>
-            <tbody>
-              {assets.map((asset) => (
-                <tr key={asset.id}>
-                  <td>{songs.find((s) => s.id === asset.song_id)?.title || "Untitled"}</td>
-                  <td>{evidenceTypeLabel(asset.type)}</td>
-                  <td>{asset.url ? <a href={asset.url} target="_blank" rel="noreferrer">Open</a> : <span className="helper">No link</span>}</td>
-                  <td>
-                    <div className="rowActions compact">
-                      {onEditType ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence type", asset.type); if (next !== null) onEditType(asset.id, next); }}>Edit Type</button> : null}
-                      {onEditUrl ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence link", asset.url || ""); if (next !== null) onEditUrl(asset.id, next); }}>Edit Link</button> : null}
-                      {onDelete ? <button className="button compact" onClick={() => onDelete(asset.id)}>Delete</button> : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-            </table>
+        <div className="grid" style={{ gap: ".65rem" }}>
+          <div>
+            <h4 style={{ marginBottom: ".35rem" }}>Bounces</h4>
+            {renderAssetList(bounces)}
           </div>
-          <div className="mobileOnly mobileCardList">
-            {assets.map((asset) => (
-              <div key={`mobile-evidence-${asset.id}`} className="mobileDataCard">
-                <h4>{songs.find((s) => s.id === asset.song_id)?.title || "Untitled"}</h4>
-                <p className="helper">{evidenceTypeLabel(asset.type)}</p>
-                <div className="rowActions compact" style={{ marginTop: ".35rem" }}>
-                  {asset.url ? <a className="button compact" href={asset.url} target="_blank" rel="noreferrer">Open</a> : <span className="helper">No link</span>}
-                  {onEditType ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence type", asset.type); if (next !== null) onEditType(asset.id, next); }}>Type</button> : null}
-                  {onEditUrl ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence link", asset.url || ""); if (next !== null) onEditUrl(asset.id, next); }}>Link</button> : null}
-                  {onDelete ? <button className="button compact" onClick={() => onDelete(asset.id)}>Delete</button> : null}
-                </div>
-              </div>
-            ))}
+          <div>
+            <h4 style={{ marginBottom: ".35rem" }}>Lyrics</h4>
+            {renderAssetList(lyrics)}
           </div>
-        </>
+          <div>
+            <h4 style={{ marginBottom: ".35rem" }}>Other Evidence</h4>
+            {renderAssetList(otherEvidence)}
+          </div>
+        </div>
       )}
     </div>
   );
