@@ -9,6 +9,7 @@ export default function HelpPage() {
       <PageHeader title="Help" subtitle="Practical guidance for reconstruction, imports, and evidence hygiene." actions={<Link className="button" href="/sessions?import=1">Import Calendar</Link>} />
 
       <SectionCard title="What this app is for"><p>This app tracks writing sessions, songs/works, evidence links, pitches, cuts, registrations, disputes, and follow-ups.</p></SectionCard>
+      <SectionCard title="Settings Controls"><p>Use Settings to manage your profile/contact defaults, archive/evidence standards, session defaults, writer/split defaults, pitch defaults, storage preferences, and integrations status.</p><ul style={{ paddingLeft: "1.2rem", marginTop: ".5rem" }}><li>Profile/contact defaults are single-user and saved in-app for this workspace.</li><li>Archive standards define your Strong/Complete expectations and review defaults.</li><li>Pitch defaults include contact email, expiry defaults, and public footer text.</li><li>Integrations section shows current setup status for Supabase, Spotify, and calendar/storage roadmap items.</li></ul></SectionCard>
       <SectionCard title="Sessions vs Songs/Works"><p>Sessions are the diary/calendar layer. Songs/works are where copyright/admin tracking lives. Session detail pages are the main enrichment workspace. Edits made there automatically update Songs/Works records, and evidence entered once is reused everywhere. Imported calendar events may start empty and should be enriched later.</p><p className="helper" style={{ marginTop: ".5rem" }}>Writers are saved as reusable records. In Session Workspace, roles can be selected or custom typed, and blank splits are assumed equal temporarily.</p></SectionCard>
       <SectionCard title="Shared Evidence Hub + Writer/Split Panel"><p>Archive Review, Session Workspace, and Song Detail now use a shared Evidence Hub and shared Writer/Split patterns for consistency.</p><ul style={{ paddingLeft: "1.2rem", marginTop: ".5rem" }}><li>Evidence labels/types are normalised consistently (Bounce, Lyrics, Apple Note, etc.).</li><li>Duplicate evidence links for the same song/type are prevented where add flows are available.</li><li>Writer/split management uses the same add/edit/delete interaction style across pages.</li></ul></SectionCard>
       <SectionCard title="How to import your calendar"><p>The app currently supports calendar file import (.ics), not live Google sync yet. Manual sessions can be added from onboarding or from the Sessions page.</p><p className="helper" style={{ marginTop: ".5rem" }}>A shared Google calendar is embedded directly inside Sessions as a temporary reference while logging records manually.</p><p className="helper" style={{ marginTop: ".5rem" }}>Date fields use calendar picker inputs for faster and more accurate entry.</p></SectionCard>
@@ -98,6 +99,17 @@ export default function HelpPage() {
         </ul>
         <p className="helper" style={{ marginTop: ".6rem" }}>Dropbox remains your archive. Supabase audio is only the pitch playback copy used for private playlists.</p>
         <p className="helper" style={{ marginTop: ".4rem" }}>Public pitch pages now use a custom streaming playlist player with lightweight Interested/Hold/Pass/Feedback actions and hidden download buttons, but browser audio can still technically be captured.</p>
+      </SectionCard>
+      <SectionCard title="Cuts Import + Achievement Tracking">
+        <ul style={{ paddingLeft: "1.2rem" }}>
+          <li>Cuts now include an <strong>Import Cut Metadata</strong> section for Spotify track links.</li>
+          <li>Spotify URL import + Spotify search now use server-side API routes and build an editable preview (title, artist, release/project, artwork, release date, listen link, platform, ISRC when available).</li>
+          <li>Manual cut entry still works and remains fully supported.</li>
+          <li>Required env for Spotify import/search: <code>SPOTIFY_CLIENT_ID</code> and <code>SPOTIFY_CLIENT_SECRET</code> (server-side only).</li>
+          <li>Apple Music import references are intentionally removed in this workflow.</li>
+          <li>Achievement tracking is optional: use notes/status fields to log chart/editorial/radio/streams/sync/certification/highlights.</li>
+          <li>Cuts reference playlist embed/link is saved in app until you replace or remove it, and shows a saved confirmation state.</li>
+        </ul>
       </SectionCard>
     </div>
   );

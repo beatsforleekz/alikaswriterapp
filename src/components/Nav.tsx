@@ -14,6 +14,7 @@ const links = [
   ["/exports", "Exports"],
   ["/actions", "Actions"],
   ["/progress-hub", "Progress Hub"],
+  ["/settings", "Settings"],
   ["/help", "Help"],
 ] as const;
 

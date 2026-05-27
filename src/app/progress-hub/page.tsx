@@ -14,7 +14,7 @@ type PlaylistEvent = { playlist_id: string; event_type: string };
 type PlaylistResponse = { playlist_id: string; response_type: string; created_at: string };
 type AssetRef = { song_id: string; type: string; url?: string | null };
 type SplitRef = { song_id: string; percentage?: number | null };
-type CutRef = { id: string; release_date?: string | null; dispute_status?: string | null };
+type CutRef = { id: string; release_date?: string | null; dispute_status?: string | null; chart_stream_notes?: string | null };
 type GoalCard = {
   id: string;
   title: string;
@@ -27,10 +27,25 @@ type GoalCard = {
 };
 
 const GOAL_KEY = "progress_hub_goal_cards_v1";
+const ACHV_PREFIX = "ACHV1:";
 
 function progressPct(current: number, target: number) {
   if (target <= 0) return 0;
   return Math.max(0, Math.min(100, Math.round((current / target) * 100)));
+}
+
+function achievementCountFromNotes(raw: string | null | undefined) {
+  const value = String(raw || "").trim();
+  if (!value) return 0;
+  if (value.startsWith(ACHV_PREFIX)) {
+    try {
+      const parsed = JSON.parse(value.slice(ACHV_PREFIX.length)) as { achievements?: Array<Record<string, unknown>> };
+      return Array.isArray(parsed.achievements) ? parsed.achievements.length : 0;
+    } catch {
+      return 0;
+    }
+  }
+  return 1;
 }
 
 export default function ProgressHubPage() {
@@ -73,7 +88,7 @@ export default function ProgressHubPage() {
         supabase.from("pitch_playlist_views").select("playlist_id,created_at"),
         supabase.from("pitch_playlist_events").select("playlist_id,event_type"),
         supabase.from("pitch_playlist_responses").select("playlist_id,response_type,created_at").order("created_at", { ascending: false }),
-        supabase.from("cut_records").select("id,release_date,dispute_status"),
+        supabase.from("cut_records").select("id,release_date,dispute_status,chart_stream_notes"),
         supabase.from("song_work_tags").select("song_id,song_tags(name)"),
       ]);
       setSessions((sRes.data ?? []).map((r) => mapSession(r as Record<string, unknown>)));
@@ -120,10 +135,16 @@ export default function ProgressHubPage() {
     const releasesCount = songs.filter((s) => s.status === "Released").length;
     const unresolvedDisputes = songs.filter((s) => s.status === "Disputed").length;
     const resolvedDisputes = cuts.filter((c) => String(c.dispute_status || "").toLowerCase().includes("resolved")).length;
+    const cutsLogged = cuts.length;
+    const totalAchievements = cuts.reduce((sum, cut) => sum + achievementCountFromNotes(cut.chart_stream_notes), 0);
+    const cutsWithAchievements = cuts.filter((cut) => achievementCountFromNotes(cut.chart_stream_notes) > 0).length;
+    const achievementsThisYear = cuts
+      .filter((cut) => String(cut.release_date || "").startsWith(yyyy))
+      .reduce((sum, cut) => sum + achievementCountFromNotes(cut.chart_stream_notes), 0);
     const syncPitches = songs.filter((s) => s.status === "Pitched" && songTags.some((t) => t.song_id === s.id && t.tag_name.toLowerCase().includes("sync"))).length;
     const syncPlacements = songs.filter((s) => s.status === "Released" && songTags.some((t) => t.song_id === s.id && t.tag_name.toLowerCase().includes("sync"))).length;
 
-    return { sessionsThisYear, sessionsThisMonth, worksThisYear, pitchReady, playlistsSent, playlistViews: playlistViews.length, playlistPlays, playlistFinishes, responsesInterested, responsesHold, cutsCount, releasesCount, syncPitches, syncPlacements, archiveComplete, unresolvedDisputes, resolvedDisputes };
+    return { sessionsThisYear, sessionsThisMonth, worksThisYear, pitchReady, playlistsSent, playlistViews: playlistViews.length, playlistPlays, playlistFinishes, responsesInterested, responsesHold, cutsCount, releasesCount, syncPitches, syncPlacements, archiveComplete, unresolvedDisputes, resolvedDisputes, cutsLogged, totalAchievements, cutsWithAchievements, achievementsThisYear };
   }, [sessions, songs, assets, splits, playlists, playlistViews, playlistEvents, playlistResponses, cuts, songTags, yyyy, yyyyMm]);
 
   const addGoal = () => {
@@ -143,13 +164,26 @@ export default function ProgressHubPage() {
           <div className="progressTile"><p className="helper">Sessions this year</p><strong>{metrics.sessionsThisYear}</strong></div>
           <div className="progressTile"><p className="helper">Works logged this year</p><strong>{metrics.worksThisYear}</strong></div>
           <div className="progressTile"><p className="helper">Pitch-ready songs</p><strong>{metrics.pitchReady}</strong></div>
+          <div className="progressTile"><p className="helper">Cuts logged</p><strong>{metrics.cutsLogged}</strong></div>
+          <div className="progressTile"><p className="helper">Achievements logged</p><strong>{metrics.totalAchievements}</strong></div>
         </div>
       </SectionCard>
 
       <div className="section">
+        <SectionCard title="Cuts + Achievements">
+          <div className="progressGrid">
+            <div className="progressTile"><p className="helper">Cuts with achievements</p><strong>{metrics.cutsWithAchievements}/{metrics.cutsLogged}</strong></div>
+            <div className="progressTile"><p className="helper">Achievements this year</p><strong>{metrics.achievementsThisYear}</strong></div>
+            <div className="progressTile"><p className="helper">Total achievements</p><strong>{metrics.totalAchievements}</strong></div>
+            <div className="progressTile"><p className="helper">Releases</p><strong>{metrics.releasesCount}</strong></div>
+          </div>
+        </SectionCard>
+      </div>
+
+      <div className="section">
         <SectionCard title="Auto Metrics Board">
           <div className="goalBoard">
-            {[{label:"Archive completeness", value: `${metrics.archiveComplete}%`, pct: metrics.archiveComplete}, {label:"Playlists sent", value: String(metrics.playlistsSent), pct: Math.min(100, metrics.playlistsSent * 10)}, {label:"Playlist plays", value: String(metrics.playlistPlays), pct: Math.min(100, metrics.playlistPlays * 5)}, {label:"Interested + Hold", value: String(metrics.responsesInterested + metrics.responsesHold), pct: Math.min(100, (metrics.responsesInterested + metrics.responsesHold) * 10)}, {label:"Cuts", value: String(metrics.cutsCount), pct: Math.min(100, metrics.cutsCount * 20)}, {label:"Releases", value: String(metrics.releasesCount), pct: Math.min(100, metrics.releasesCount * 20)}, {label:"Sync pitches", value: String(metrics.syncPitches), pct: Math.min(100, metrics.syncPitches * 15)}, {label:"Sync placements", value: String(metrics.syncPlacements), pct: Math.min(100, metrics.syncPlacements * 25)}, {label:"Unresolved disputes", value: String(metrics.unresolvedDisputes), pct: metrics.unresolvedDisputes ? 100 : 0}, {label:"Resolved disputes", value: String(metrics.resolvedDisputes), pct: Math.min(100, metrics.resolvedDisputes * 30)}].map((m) => (
+            {[{label:"Archive completeness", value: `${metrics.archiveComplete}%`, pct: metrics.archiveComplete}, {label:"Playlists sent", value: String(metrics.playlistsSent), pct: Math.min(100, metrics.playlistsSent * 10)}, {label:"Playlist plays", value: String(metrics.playlistPlays), pct: Math.min(100, metrics.playlistPlays * 5)}, {label:"Interested + Hold", value: String(metrics.responsesInterested + metrics.responsesHold), pct: Math.min(100, (metrics.responsesInterested + metrics.responsesHold) * 10)}, {label:"Cuts", value: String(metrics.cutsCount), pct: Math.min(100, metrics.cutsCount * 20)}, {label:"Cut achievements", value: String(metrics.totalAchievements), pct: Math.min(100, metrics.totalAchievements * 10)}, {label:"Releases", value: String(metrics.releasesCount), pct: Math.min(100, metrics.releasesCount * 20)}, {label:"Sync pitches", value: String(metrics.syncPitches), pct: Math.min(100, metrics.syncPitches * 15)}, {label:"Sync placements", value: String(metrics.syncPlacements), pct: Math.min(100, metrics.syncPlacements * 25)}, {label:"Unresolved disputes", value: String(metrics.unresolvedDisputes), pct: metrics.unresolvedDisputes ? 100 : 0}, {label:"Resolved disputes", value: String(metrics.resolvedDisputes), pct: Math.min(100, metrics.resolvedDisputes * 30)}].map((m) => (
               <div key={m.label} className="goalCard">
                 <p className="helper">{m.label}</p>
                 <strong>{m.value}</strong>

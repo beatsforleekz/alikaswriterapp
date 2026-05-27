@@ -160,6 +160,66 @@ tr:hover td { background: #f8f2ec; }
 .mobileDataCard { background: #fffdfb; border: 1px solid var(--line); border-radius: 12px; padding: .75rem; box-shadow: var(--shadow); }
 .mobileDataCard h4 { font-size: .98rem; margin-bottom: .35rem; }
 
+.cutHero {
+  display: grid;
+  grid-template-columns: minmax(180px, 220px) 1fr;
+  gap: .9rem;
+  align-items: start;
+}
+.cutArtworkWrap {
+  display: grid;
+  gap: .5rem;
+}
+.cutArtwork {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  object-fit: cover;
+  background: #f7eee4;
+}
+.cutArtworkPlaceholder {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 14px;
+  border: 1px dashed #d8c7b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  background: #faf4ee;
+}
+.cutHeroMeta {
+  display: grid;
+  gap: .5rem;
+}
+.cutAchievementComposer {
+  display: grid;
+  gap: .5rem;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+.cutAchievementComposer textarea {
+  grid-column: 1 / -1;
+  min-height: 78px;
+}
+.cutAchievementGrid {
+  display: grid;
+  gap: .6rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.cutAchievementCard {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: .7rem;
+  background: #fffdfb;
+  box-shadow: var(--shadow);
+}
+.cutAchievementCard h4 {
+  font-size: 1rem;
+  margin-top: .45rem;
+  margin-bottom: .35rem;
+}
+
 @media (max-width: 980px) {
   .appShell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; }
@@ -187,6 +247,12 @@ tr:hover td { background: #f8f2ec; }
   .mobileOnly { display: block; }
   .desktopOnly { display: none; }
   .tableWrap table { min-width: 620px; }
+  .cutHero {
+    grid-template-columns: 1fr;
+  }
+  .cutArtworkWrap {
+    max-width: 280px;
+  }
   .button, button {
     padding: .42rem .62rem;
     border-radius: 10px;
