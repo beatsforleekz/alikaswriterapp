@@ -137,6 +137,9 @@ export default function SessionsPage() {
   const [showImportPreview, setShowImportPreview] = useState(false);
   const [error, setError] = useState("");
   const [sortBy, setSortBy] = useState<"az" | "za" | "date" | "recent" | "added">("recent");
+  const [reviewFilter, setReviewFilter] = useState<"all" | "reviewed" | "not-reviewed" | "needs-follow-up">("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | "manual" | "calendar" | "calendar_import">("all");
+  const [evidenceFilter, setEvidenceFilter] = useState<"all" | "weak-partial" | "strong-complete">("all");
   const initialized = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -224,7 +227,22 @@ export default function SessionsPage() {
   }, [rows, songs, assets]);
 
   const sortedRows = useMemo(() => {
-    const next = [...rows];
+    const openStatuses = new Set(["open", "in progress", "pending", "todo"]);
+    const filteredRows = rows.filter((session) => {
+      if (sourceFilter !== "all" && session.source !== sourceFilter) return false;
+      if (reviewFilter === "reviewed" && !session.archive_reviewed) return false;
+      if (reviewFilter === "not-reviewed" && session.archive_reviewed) return false;
+      if (reviewFilter === "needs-follow-up") {
+        const sessionActions = actions.filter((a) => String(a.session_id || "") === session.id);
+        const hasOpen = sessionActions.some((a) => openStatuses.has(String(a.status || "").toLowerCase().trim()));
+        if (!hasOpen) return false;
+      }
+      const strength = effectiveStrengthBySession[session.id]?.value || "Weak";
+      if (evidenceFilter === "weak-partial" && !["Weak", "Partial"].includes(strength)) return false;
+      if (evidenceFilter === "strong-complete" && !["Strong", "Complete"].includes(strength)) return false;
+      return true;
+    });
+    const next = [...filteredRows];
     if (sortBy === "az") {
       next.sort((a, b) => (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: "base" }));
     } else if (sortBy === "za") {
@@ -237,7 +255,7 @@ export default function SessionsPage() {
       next.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     }
     return next;
-  }, [rows, sortBy]);
+  }, [rows, sortBy, reviewFilter, sourceFilter, evidenceFilter, actions, effectiveStrengthBySession]);
 
   const update = async (id: string, key: keyof Session, value: string | boolean) => {
     setError("");
@@ -344,6 +362,26 @@ export default function SessionsPage() {
             {error ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{error}</p> : null}
             {importMessage ? <p className="helper" style={{ marginBottom: ".7rem" }}>{importMessage}</p> : null}
             <div className="rowActions compact" style={{ marginBottom: ".6rem" }}>
+              <label className="helper">Review</label>
+              <select value={reviewFilter} onChange={(e) => setReviewFilter(e.target.value as "all" | "reviewed" | "not-reviewed" | "needs-follow-up")} style={{ maxWidth: 190 }}>
+                <option value="all">All</option>
+                <option value="reviewed">Reviewed</option>
+                <option value="not-reviewed">Not Reviewed</option>
+                <option value="needs-follow-up">Needs Follow-up</option>
+              </select>
+              <label className="helper">Source</label>
+              <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as "all" | "manual" | "calendar" | "calendar_import")} style={{ maxWidth: 190 }}>
+                <option value="all">All Sources</option>
+                <option value="manual">Manual</option>
+                <option value="calendar">Calendar</option>
+                <option value="calendar_import">Calendar Import</option>
+              </select>
+              <label className="helper">Evidence</label>
+              <select value={evidenceFilter} onChange={(e) => setEvidenceFilter(e.target.value as "all" | "weak-partial" | "strong-complete")} style={{ maxWidth: 190 }}>
+                <option value="all">All Evidence</option>
+                <option value="weak-partial">Weak/Partial</option>
+                <option value="strong-complete">Strong/Complete</option>
+              </select>
               <label className="helper">Sort</label>
               <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "za" | "date" | "recent" | "added")} style={{ maxWidth: 200 }}>
                 <option value="az">A-Z</option>

@@ -53,6 +53,8 @@ export default function SongsPage() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState("all");
+  const [linkFilter, setLinkFilter] = useState<"all" | "linked" | "unlinked">("all");
+  const [readinessFilter, setReadinessFilter] = useState<"all" | "ready" | "needs-evidence">("all");
   const [sortBy, setSortBy] = useState<"az" | "za" | "date" | "recent" | "added">("recent");
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -116,6 +118,13 @@ export default function SongsPage() {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (!match(r, filter, assets)) return false;
+      if (linkFilter === "linked" && !r.sessionId) return false;
+      if (linkFilter === "unlinked" && r.sessionId) return false;
+      const songAssets = assets.filter((a) => a.song_id === r.id);
+      const hasBounce = Boolean(r.bounceLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "bounce" && Boolean(a.url));
+      const hasLyrics = Boolean(r.lyricsLink?.trim()) || songAssets.some((a) => normalizeEvidenceType(a.type) === "lyrics" && Boolean(a.url));
+      if (readinessFilter === "ready" && !(hasBounce && hasLyrics)) return false;
+      if (readinessFilter === "needs-evidence" && hasBounce && hasLyrics) return false;
       const tagsForSong = songTags.filter((t) => t.song_id === r.id).map((t) => t.tag_name);
       if (tagFilter !== "all" && !tagsForSong.some((t) => t.toLowerCase() === tagFilter.toLowerCase())) return false;
       if (!q) return true;
@@ -123,7 +132,7 @@ export default function SongsPage() {
       const hay = [r.title, r.status, ...writerNames, ...tagsForSong].join(" ").toLowerCase();
       return hay.includes(q);
     });
-  }, [rows, filter, assets, search, splits, songTags, tagFilter]);
+  }, [rows, filter, assets, search, splits, songTags, tagFilter, linkFilter, readinessFilter]);
 
   const sortedFiltered = useMemo(() => {
     const next = [...filtered];
@@ -202,6 +211,18 @@ export default function SongsPage() {
         <select value={tagFilter} onChange={(e) => setTagFilter(e.target.value)} style={{ maxWidth: 220 }}>
           <option value="all">All Tags</option>
           {allTags.map((tag) => <option key={tag} value={tag}>{tag}</option>)}
+        </select>
+        <label>Session Link</label>
+        <select value={linkFilter} onChange={(e) => setLinkFilter(e.target.value as "all" | "linked" | "unlinked")} style={{ maxWidth: 180 }}>
+          <option value="all">All</option>
+          <option value="linked">Linked</option>
+          <option value="unlinked">Unlinked</option>
+        </select>
+        <label>Readiness</label>
+        <select value={readinessFilter} onChange={(e) => setReadinessFilter(e.target.value as "all" | "ready" | "needs-evidence")} style={{ maxWidth: 190 }}>
+          <option value="all">All</option>
+          <option value="ready">Bounce + Lyrics Ready</option>
+          <option value="needs-evidence">Needs Bounce/Lyrics</option>
         </select>
         <label>Search</label>
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title, writer, status, tag" style={{ maxWidth: 280 }} />
