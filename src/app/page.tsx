@@ -172,7 +172,8 @@ export default function Page() {
     if (Math.round(total * 100) / 100 !== 100) unresolvedSplitSongIds.add(song.id);
   }
   const unresolvedSplitSongs = songs.filter((s) => unresolvedSplitSongIds.has(s.id));
-  const pitchedSongs = songs.filter((s) => ["Pitched", "On Hold", "Cut", "Released"].includes(s.status));
+  const pitchedSongs = songs.filter((s) => ["Pitched", "On Hold"].includes(s.status));
+  const cutsCount = songs.filter((s) => s.status === "Cut").length;
   const weakEvidenceSessions = sessions.filter((s) => !s.evidence_strength || s.evidence_strength === "Weak" || s.evidence_strength === "Partial");
   const topBlockerSongs = readinessItems.filter((r) => r.status !== "Ready to Pitch").slice(0, 5);
 
@@ -193,6 +194,7 @@ export default function Page() {
           <StatCard label="Hold/Interested Responses" value={holdInterestedResponses.length} tone={holdInterestedResponses.length ? "amber" : "success"} href="/playlists" />
           <StatCard label="Disputed Songs" value={disputed} tone={disputed ? "danger" : "success"} href="/songs?filter=disputed" />
           <StatCard label="Songs with Pitch Activity" value={pitchedSongs.length} tone={pitchedSongs.length ? "neutral" : "success"} href="/songs?filter=pitched" />
+          <StatCard label="Cuts" value={cutsCount} tone={cutsCount ? "neutral" : "success"} href="/cuts" />
           <StatCard label="Overdue Follow-ups" value={overdueActions.length} tone={overdueActions.length ? "danger" : "success"} href="/actions" />
         </div>
         <div className="rowActions compact" style={{ marginTop: ".65rem", flexWrap: "wrap" }}>
