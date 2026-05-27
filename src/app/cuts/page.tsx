@@ -47,10 +47,15 @@ function extractEmbedUrl(raw: string) {
 
 export default function CutsPage() {
   const [rows, setRows] = useState<CutRecord[]>([]);
+  const [songOptions, setSongOptions] = useState<Array<{ id: string; title: string }>>([]);
+  const [newCutSongId, setNewCutSongId] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState("");
   const [playlistInput, setPlaylistInput] = useState("");
   const [savedPlaylistRef, setSavedPlaylistRef] = useState("");
+  const [showPlaylistEditor, setShowPlaylistEditor] = useState(true);
+  const [playlistSaveState, setPlaylistSaveState] = useState<"idle" | "saved" | "error">("idle");
+  const [playlistSaveMsg, setPlaylistSaveMsg] = useState("");
 
   const embedUrl = extractEmbedUrl(savedPlaylistRef);
   const fallbackUrl = (() => {
@@ -65,24 +70,36 @@ export default function CutsPage() {
   })();
 
   const load = async () => {
-    const { data, error } = await supabase.from("cut_records").select("*").order("created_at", { ascending: false });
-    if (error) {
+    const [cutRes, songRes] = await Promise.all([
+      supabase.from("cut_records").select("*").order("created_at", { ascending: false }),
+      supabase.from("song_works").select("id,title").order("title", { ascending: true }),
+    ]);
+    if (cutRes.error || songRes.error) {
+      const error = cutRes.error || songRes.error;
       logSupabaseError("Failed to load cuts", error);
       setErrorMsg(supabaseUserMessage("Could not load cut records", error));
       return;
     }
-    setRows((data ?? []).map((r) => mapCut(r as Record<string, unknown>)));
+    setRows((cutRes.data ?? []).map((r) => mapCut(r as Record<string, unknown>)));
+    const options = ((songRes.data ?? []) as Array<{ id: string; title?: string | null }>).map((s) => ({ id: String(s.id), title: String(s.title ?? "Untitled Song") }));
+    setSongOptions(options);
+    setNewCutSongId((prev) => prev || options[0]?.id || "");
   };
   useEffect(() => { load(); }, []);
   useEffect(() => {
     const saved = window.localStorage.getItem(CUTS_PLAYLIST_KEY) || "";
     setSavedPlaylistRef(saved);
     setPlaylistInput(saved);
+    setShowPlaylistEditor(!saved);
   }, []);
 
   const addRow = async () => {
     setErrorMsg("");
-    const { data, error } = await supabase.from("cut_records").insert({ song_id: null }).select("*").single();
+    if (!newCutSongId) {
+      setErrorMsg("Select a song/work before adding a cut record.");
+      return;
+    }
+    const { data, error } = await supabase.from("cut_records").insert({ song_id: newCutSongId }).select("*").single();
     if (error) {
       logSupabaseError("Failed to create cut", error);
       setErrorMsg(supabaseUserMessage("Could not create cut record", error));
@@ -91,9 +108,13 @@ export default function CutsPage() {
     if (data) { setRows((r) => [mapCut(data as Record<string, unknown>), ...r]); setEditingId(String(data.id)); }
   };
   const update = async (id: string, key: keyof CutRecord, value: string) => {
+    if (key === "songId" && !value.trim()) {
+      setErrorMsg("Song ID is required for cut records.");
+      return;
+    }
     setRows((r) => r.map((x) => (x.id === id ? { ...x, [key]: value } : x)));
     const colMap: Record<string, string> = { songId: "song_id", artist: "artist", releaseTitle: "release_title", releaseDate: "release_date" };
-    const { error } = await supabase.from("cut_records").update({ [colMap[key]]: key === "songId" && !value ? null : value }).eq("id", id);
+    const { error } = await supabase.from("cut_records").update({ [colMap[key]]: value }).eq("id", id);
     if (error) {
       logSupabaseError("Failed to update cut", error);
       setErrorMsg(supabaseUserMessage("Could not update cut record", error));
@@ -101,28 +122,54 @@ export default function CutsPage() {
   };
   const del = async (id: string) => { if (!window.confirm("Delete this cut record?")) return; const { error } = await supabase.from("cut_records").delete().eq("id", id); if (error) { logSupabaseError("Failed to delete cut", error); setErrorMsg(supabaseUserMessage("Could not delete cut record", error)); return; } setRows((r) => r.filter((x) => x.id !== id)); };
   const savePlaylistRef = () => {
-    const next = playlistInput.trim();
-    window.localStorage.setItem(CUTS_PLAYLIST_KEY, next);
-    setSavedPlaylistRef(next);
+    try {
+      const next = playlistInput.trim();
+      window.localStorage.setItem(CUTS_PLAYLIST_KEY, next);
+      setSavedPlaylistRef(next);
+      setShowPlaylistEditor(false);
+      setPlaylistSaveState("saved");
+      setPlaylistSaveMsg("Saved in app");
+    } catch {
+      setPlaylistSaveState("error");
+      setPlaylistSaveMsg("Could not save playlist reference. Please try again.");
+    }
   };
   const removePlaylistRef = () => {
-    window.localStorage.removeItem(CUTS_PLAYLIST_KEY);
-    setSavedPlaylistRef("");
-    setPlaylistInput("");
+    try {
+      window.localStorage.removeItem(CUTS_PLAYLIST_KEY);
+      setSavedPlaylistRef("");
+      setPlaylistInput("");
+      setShowPlaylistEditor(true);
+      setPlaylistSaveState("idle");
+      setPlaylistSaveMsg("");
+    } catch {
+      setPlaylistSaveState("error");
+      setPlaylistSaveMsg("Could not remove playlist reference.");
+    }
   };
 
   return (
     <div>
-      <PageHeader title="Cuts" subtitle="Commercial release tracking with understated, auditable detail." actions={<button className="button primary" onClick={addRow}>Add Cut Record</button>} />
+      <PageHeader title="Cuts" subtitle="Commercial release tracking with understated, auditable detail." actions={<div className="rowActions compact"><select value={newCutSongId} onChange={(e) => setNewCutSongId(e.target.value)} style={{ minWidth: 220 }}><option value="">Select song/work</option>{songOptions.map((song) => <option key={song.id} value={song.id}>{song.title}</option>)}</select><button className="button primary" onClick={addRow}>Add Cut Record</button></div>} />
       {errorMsg ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{errorMsg}</p> : null}
 
       <SectionCard title="Writer Playlist / Reference Playlist">
         <p className="helper" style={{ marginBottom: ".55rem" }}>Embed a Spotify, SoundCloud, Apple Music, YouTube or other playlist here to assist with cut tracking.</p>
-        <textarea value={playlistInput} onChange={(e) => setPlaylistInput(e.target.value)} placeholder="Paste playlist URL or embed code" />
-        <div className="rowActions compact" style={{ marginTop: ".55rem" }}>
-          <button className="button primary compact" onClick={savePlaylistRef}>Save Playlist Reference</button>
-          <button className="button compact" onClick={removePlaylistRef} disabled={!savedPlaylistRef}>Remove</button>
-        </div>
+        {showPlaylistEditor ? (
+          <>
+            <textarea value={playlistInput} onChange={(e) => setPlaylistInput(e.target.value)} placeholder="Paste playlist URL or embed code" />
+            <div className="rowActions compact" style={{ marginTop: ".55rem" }}>
+              <button className="button primary compact" onClick={savePlaylistRef}>Save Playlist Reference</button>
+              <button className="button compact" onClick={removePlaylistRef} disabled={!savedPlaylistRef}>Remove</button>
+            </div>
+          </>
+        ) : (
+          <div className="rowActions compact" style={{ marginBottom: ".55rem" }}>
+            <span className="helper" style={{ color: playlistSaveState === "error" ? "#8a3d3d" : "#3f6b4a" }}>{playlistSaveMsg || "Saved in app"}</span>
+            <button className="button compact" onClick={() => setShowPlaylistEditor(true)}>Replace playlist</button>
+            <button className="button compact" onClick={removePlaylistRef} disabled={!savedPlaylistRef}>Remove</button>
+          </div>
+        )}
         {savedPlaylistRef ? (
           <div style={{ marginTop: ".75rem" }}>
             {embedUrl ? (
