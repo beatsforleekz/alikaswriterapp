@@ -29,8 +29,6 @@ export default function SongDetail() {
   const [titleDraft, setTitleDraft] = useState("");
   const [statusDraft, setStatusDraft] = useState("");
   const [notesDraft, setNotesDraft] = useState("");
-  const [bounceDraft, setBounceDraft] = useState("");
-  const [lyricsDraft, setLyricsDraft] = useState("");
   const [songActions, setSongActions] = useState<Array<{ status?: string | null; song_id?: string | null }>>([]);
   const [assetType, setAssetType] = useState("other");
   const [assetUrl, setAssetUrl] = useState("");
@@ -53,8 +51,6 @@ export default function SongDetail() {
       setTitleDraft(mapped.title || "");
       setStatusDraft(mapped.status || "Started");
       setNotesDraft(mapped.notes || "");
-      setBounceDraft(mapped.bounceLink || "");
-      setLyricsDraft(mapped.lyricsLink || "");
       setAudioUrl(await getPlayableAudioUrl(mapped.audioStoragePath));
 
       if (mapped.sessionId) {
@@ -135,8 +131,6 @@ export default function SongDetail() {
         title: titleDraft.trim(),
         status: statusDraft,
         notes: notesDraft.trim() || null,
-        bounce_link: bounceDraft.trim() || null,
-        lyrics_link: lyricsDraft.trim() || null,
       })
       .eq("id", song.id);
     if (songErr) {
@@ -150,8 +144,6 @@ export default function SongDetail() {
       title: titleDraft.trim(),
       status: statusDraft as typeof prev.status,
       notes: notesDraft.trim() || undefined,
-      bounceLink: bounceDraft.trim() || undefined,
-      lyricsLink: lyricsDraft.trim() || undefined,
     } : prev);
     setSaveState("saved");
     setLastSavedAt(new Date().toLocaleString());
@@ -255,7 +247,7 @@ export default function SongDetail() {
   };
 
   const readiness = songReadiness(
-    { id: song.id, title: song.title, bounce_link: bounceDraft, lyrics_link: lyricsDraft },
+    { id: song.id, title: song.title, bounce_link: song.bounceLink, lyrics_link: song.lyricsLink },
     assets.map((a) => ({ song_id: song.id, type: a.type, url: a.url })),
     splits.map((s) => ({ song_id: song.id, percentage: s.percentage })),
     songActions,
@@ -275,8 +267,6 @@ export default function SongDetail() {
           <dt>Pitch Readiness</dt><dd><StatusBadge label={readiness} /></dd>
           <dt>Tags</dt><dd><div className="rowActions compact"><input list="song-tag-options-detail" value={tagInput} onChange={(e) => setTagInput(e.target.value)} placeholder="Type or reuse tag" /><button className="button compact" type="button" onClick={addTag}>Add Tag</button></div><datalist id="song-tag-options-detail">{tagOptions.map((tag) => <option key={tag.id} value={tag.name} />)}</datalist><div className="rowActions compact" style={{ marginTop: ".4rem" }}>{songTags.length ? songTags.map((tag) => <button key={tag.id} className="button compact" type="button" onClick={() => removeTag(tag.id)}>{tag.name} ✕</button>) : <span className="helper">No tags</span>}</div></dd>
           <dt>Session</dt><dd>{sessionRef ? <Link href={`/sessions/${sessionRef.id}`}>{sessionRef.date} - {sessionRef.title || "Untitled Session"}</Link> : <span className="helper">Unlinked session</span>}</dd>
-          <dt>Bounce Link</dt><dd><input value={bounceDraft} onChange={(e) => setBounceDraft(e.target.value)} placeholder="https://..." /></dd>
-          <dt>Lyrics Link</dt><dd><input value={lyricsDraft} onChange={(e) => setLyricsDraft(e.target.value)} placeholder="https://..." /></dd>
           <dt>Notes</dt><dd><textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="Song/work notes" /></dd>
         </div>
       </SectionCard>

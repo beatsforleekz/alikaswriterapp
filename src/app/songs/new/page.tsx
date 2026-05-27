@@ -24,8 +24,6 @@ export default function NewSongWorkPage() {
   const [tagInput, setTagInput] = useState("");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
-  const [bounce, setBounce] = useState("");
-  const [lyrics, setLyrics] = useState("");
   const [dropbox, setDropbox] = useState("");
   const [voiceNote, setVoiceNote] = useState("");
   const [googleDoc, setGoogleDoc] = useState("");
@@ -85,16 +83,11 @@ export default function NewSongWorkPage() {
     setSaving(true);
     setError("");
 
-    const effectiveStatus =
-      bounce.trim() && lyrics.trim() && (status === "Started" || status === "Written" || status === "Bounce In")
-        ? "Assets Filed"
-        : bounce.trim() && !lyrics.trim() && (status === "Started" || status === "Written")
-          ? "Bounce In"
-          : status;
+    const effectiveStatus = status;
 
     const { data: songRow, error: songErr } = await supabase
       .from("song_works")
-      .insert({ title, session_id: sessionId || null, status: effectiveStatus, bounce_link: bounce || null, lyrics_link: lyrics || null })
+      .insert({ title, session_id: sessionId || null, status: effectiveStatus })
       .select("id")
       .single();
 
@@ -151,8 +144,6 @@ export default function NewSongWorkPage() {
     }
 
     const assets = [
-      bounce ? { song_id: songId, type: "bounce", url: bounce } : null,
-      lyrics ? { song_id: songId, type: "lyrics", url: lyrics } : null,
       dropbox ? { song_id: songId, type: "dropbox", url: dropbox } : null,
       voiceNote ? { song_id: songId, type: "voice_note", url: voiceNote } : null,
       googleDoc ? { song_id: songId, type: "google_doc", url: googleDoc } : null,
@@ -231,8 +222,6 @@ export default function NewSongWorkPage() {
 
       <SectionCard title="Evidence / Assets Quick Links">
         <div className="kv">
-          <dt>Bounce link (required)</dt><dd><input value={bounce} onChange={(e)=>setBounce(e.target.value)} placeholder="https://..." /></dd>
-          <dt>Lyrics link (required)</dt><dd><input value={lyrics} onChange={(e)=>setLyrics(e.target.value)} placeholder="https://..." /></dd>
           <dt>Dropbox folder</dt><dd><input value={dropbox} onChange={(e)=>setDropbox(e.target.value)} /></dd>
           <dt>Voice note</dt><dd><input value={voiceNote} onChange={(e)=>setVoiceNote(e.target.value)} /></dd>
           <dt>Google Doc</dt><dd><input value={googleDoc} onChange={(e)=>setGoogleDoc(e.target.value)} /></dd>
