@@ -62,20 +62,6 @@ export default function EvidenceHub({
             </tbody>
           </table>
         </div>
-        <div className="mobileOnly mobileCardList">
-          {sectionAssets.map((asset) => (
-            <div key={`mobile-evidence-${asset.id}`} className="mobileDataCard">
-              <h4>{songs.find((s) => s.id === asset.song_id)?.title || "Untitled"}</h4>
-              <p className="helper">{evidenceTypeLabel(asset.type)}</p>
-              <div className="rowActions compact" style={{ marginTop: ".35rem" }}>
-                {asset.url ? <a className="button compact" href={asset.url} target="_blank" rel="noreferrer">Open</a> : <span className="helper">No link</span>}
-                {onEditType ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence type", asset.type); if (next !== null) onEditType(asset.id, next); }}>Type</button> : null}
-                {onEditUrl ? <button className="button compact" onClick={() => { const next = window.prompt("Update evidence link", asset.url || ""); if (next !== null) onEditUrl(asset.id, next); }}>Link</button> : null}
-                {onDelete ? <button className="button compact" onClick={() => onDelete(asset.id)}>Delete</button> : null}
-              </div>
-            </div>
-          ))}
-        </div>
       </>
     );
   };
