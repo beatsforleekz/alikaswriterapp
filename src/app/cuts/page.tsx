@@ -23,6 +23,7 @@ type SpotifyApiPreview = {
   album?: string;
 };
 const ACHV_PREFIX = "ACHV1:";
+const CUTS_PLAYLIST_SETTING_KEY = "cuts_playlist_reference";
 
 const mapCut = (r: Record<string, unknown>): CutRecord => ({
   id: String(r.id ?? ""),
@@ -79,6 +80,7 @@ export default function CutsPage() {
   const [showPlaylistEditor, setShowPlaylistEditor] = useState(true);
   const [playlistSaveState, setPlaylistSaveState] = useState<"idle" | "saved" | "error">("idle");
   const [playlistSaveMsg, setPlaylistSaveMsg] = useState("");
+  const [playlistLoadedFrom, setPlaylistLoadedFrom] = useState<"none" | "supabase" | "local_migrated">("none");
 
   const [importUrl, setImportUrl] = useState("");
   const [importPreview, setImportPreview] = useState<SpotifyApiPreview | null>(null);
@@ -122,10 +124,43 @@ export default function CutsPage() {
 
   useEffect(() => { load(); }, []);
   useEffect(() => {
-    const saved = window.localStorage.getItem(CUTS_PLAYLIST_KEY) || "";
-    setSavedPlaylistRef(saved);
-    setPlaylistInput(saved);
-    setShowPlaylistEditor(!saved);
+    const loadPlaylistRef = async () => {
+      const { data, error } = await supabase.from("app_settings").select("value_text").eq("key", CUTS_PLAYLIST_SETTING_KEY).maybeSingle();
+      if (!error && data?.value_text) {
+        const saved = String(data.value_text);
+        setSavedPlaylistRef(saved);
+        setPlaylistInput(saved);
+        setShowPlaylistEditor(false);
+        setPlaylistLoadedFrom("supabase");
+        setPlaylistSaveState("saved");
+        setPlaylistSaveMsg("Saved in app");
+        return;
+      }
+      const local = window.localStorage.getItem(CUTS_PLAYLIST_KEY) || "";
+      if (local) {
+        const upsert = await supabase.from("app_settings").upsert(
+          { key: CUTS_PLAYLIST_SETTING_KEY, value_text: local, updated_at: new Date().toISOString() },
+          { onConflict: "key" },
+        );
+        if (upsert.error) {
+          setPlaylistSaveState("error");
+          setPlaylistSaveMsg("Could not load playlist from app data.");
+          setShowPlaylistEditor(true);
+          return;
+        }
+        setSavedPlaylistRef(local);
+        setPlaylistInput(local);
+        setShowPlaylistEditor(false);
+        setPlaylistLoadedFrom("local_migrated");
+        setPlaylistSaveState("saved");
+        setPlaylistSaveMsg("Saved in app");
+        return;
+      }
+      setSavedPlaylistRef("");
+      setPlaylistInput("");
+      setShowPlaylistEditor(true);
+    };
+    loadPlaylistRef();
   }, []);
 
   const addRow = async () => {
@@ -261,31 +296,52 @@ export default function CutsPage() {
   };
 
   const savePlaylistRef = () => {
-    try {
+    const run = async () => {
       const next = playlistInput.trim();
+      const { error } = await supabase.from("app_settings").upsert(
+        { key: CUTS_PLAYLIST_SETTING_KEY, value_text: next || null, updated_at: new Date().toISOString() },
+        { onConflict: "key" },
+      );
+      if (error) {
+        logSupabaseError("Failed to save cuts playlist reference", error);
+        setPlaylistSaveState("error");
+        setPlaylistSaveMsg("Could not save playlist reference to app data.");
+        return;
+      }
       window.localStorage.setItem(CUTS_PLAYLIST_KEY, next);
       setSavedPlaylistRef(next);
       setShowPlaylistEditor(false);
+      setPlaylistLoadedFrom("supabase");
       setPlaylistSaveState("saved");
       setPlaylistSaveMsg("Saved in app");
-    } catch {
+    };
+    run().catch(() => {
       setPlaylistSaveState("error");
       setPlaylistSaveMsg("Could not save playlist reference. Please try again.");
-    }
+    });
   };
 
   const removePlaylistRef = () => {
-    try {
+    const run = async () => {
+      const { error } = await supabase.from("app_settings").delete().eq("key", CUTS_PLAYLIST_SETTING_KEY);
+      if (error) {
+        logSupabaseError("Failed to remove cuts playlist reference", error);
+        setPlaylistSaveState("error");
+        setPlaylistSaveMsg("Could not remove playlist reference from app data.");
+        return;
+      }
       window.localStorage.removeItem(CUTS_PLAYLIST_KEY);
       setSavedPlaylistRef("");
       setPlaylistInput("");
       setShowPlaylistEditor(true);
+      setPlaylistLoadedFrom("none");
       setPlaylistSaveState("idle");
       setPlaylistSaveMsg("");
-    } catch {
+    };
+    run().catch(() => {
       setPlaylistSaveState("error");
       setPlaylistSaveMsg("Could not remove playlist reference.");
-    }
+    });
   };
 
   const rowAchievementCount = (c: CutRecord) => {
@@ -363,6 +419,9 @@ export default function CutsPage() {
 
       <SectionCard title="Writer Playlist / Reference Playlist">
         <p className="helper" style={{ marginBottom: ".55rem" }}>Embed a Spotify, SoundCloud, YouTube or other playlist here to assist with cut tracking.</p>
+        <p className="helper" style={{ marginBottom: ".45rem" }}>
+          Supabase data source: {String(process.env.NEXT_PUBLIC_SUPABASE_URL || "not configured")}
+        </p>
         {showPlaylistEditor ? (
           <>
             <textarea value={playlistInput} onChange={(e) => setPlaylistInput(e.target.value)} placeholder="Paste playlist URL or embed code" />
@@ -373,7 +432,9 @@ export default function CutsPage() {
           </>
         ) : (
           <div className="rowActions compact" style={{ marginBottom: ".55rem" }}>
-            <span className="helper" style={{ color: playlistSaveState === "error" ? "#8a3d3d" : "#3f6b4a" }}>{playlistSaveMsg || "Saved in app"}</span>
+            <span className="helper" style={{ color: playlistSaveState === "error" ? "#8a3d3d" : "#3f6b4a" }}>
+              {playlistSaveMsg || "Saved in app"}{playlistLoadedFrom === "supabase" ? " (Supabase)" : playlistLoadedFrom === "local_migrated" ? " (migrated to Supabase)" : ""}
+            </span>
             <button className="button compact" onClick={() => setShowPlaylistEditor(true)}>Replace playlist</button>
             <button className="button compact" onClick={removePlaylistRef} disabled={!savedPlaylistRef}>Remove</button>
           </div>

@@ -397,7 +397,7 @@ export default function SessionsPage() {
               <EmptyState title="No sessions yet" hint="Import a calendar file or add sessions manually." action={<><button className="button" onClick={() => fileInputRef.current?.click()}>Import Calendar</button><Link className="button primary" href="/sessions/new">Add Session</Link></>} />
             ) : (
               <>
-              <div className="tableWrap desktopOnly">
+              <div className="tableWrap">
                 <table>
                   <thead><tr><th>Date</th><th>Title</th><th>Location</th><th>Source</th><th>Archive Reviewed</th><th>Evidence Strength</th><th>Actions</th></tr></thead>
                   <tbody>
@@ -417,27 +417,6 @@ export default function SessionsPage() {
                     })}
                   </tbody>
                 </table>
-              </div>
-              <div className="mobileOnly mobileCardList">
-                {sortedRows.map((se) => {
-                  const effective = effectiveStrengthBySession[se.id];
-                  return (
-                    <div key={`mobile-${se.id}`} className="mobileDataCard">
-                      <h4>{se.title || "Untitled Session"}</h4>
-                      <p className="helper">{se.date || "No date"} · {se.location || "No location"}</p>
-                      <div className="rowActions compact" style={{ marginTop: ".4rem" }}>
-                        <StatusBadge label={effective?.value || "Weak"} />
-                        <span className="statusBadge">{evidenceAssetSummaryBySession[se.id]}</span>
-                        <span className="statusBadge">{archiveReviewedLabelBySession[se.id] || "No"}</span>
-                      </div>
-                      <div className="rowActions compact" style={{ marginTop: ".5rem" }}>
-                        <Link className="button compact" href={`/sessions/${se.id}`}>View</Link>
-                        <button className="button compact" onClick={() => setEditingId(editingId === se.id ? null : se.id)}>{editingId === se.id ? "Save" : "Edit"}</button>
-                        <button className="button compact" onClick={() => del(se.id)}>Delete</button>
-                      </div>
-                    </div>
-                  );
-                })}
               </div>
               </>
             )}

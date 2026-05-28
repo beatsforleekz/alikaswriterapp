@@ -152,6 +152,12 @@ create table if not exists session_review_history (
   created_at timestamptz not null default now()
 );
 
+create table if not exists app_settings (
+  key text primary key,
+  value_text text,
+  updated_at timestamptz default now()
+);
+
 create table if not exists pitch_playlists (
   id uuid primary key default gen_random_uuid(),
   title text not null,
@@ -222,6 +228,7 @@ alter table public.contract_records enable row level security;
 alter table public.action_items enable row level security;
 alter table public.archive_progress enable row level security;
 alter table public.session_review_history enable row level security;
+alter table public.app_settings enable row level security;
 alter table public.pitch_playlists enable row level security;
 alter table public.pitch_playlist_tracks enable row level security;
 alter table public.pitch_playlist_views enable row level security;
@@ -270,6 +277,7 @@ create policy "dev delete song_works" on public.song_works for delete to anon us
 grant select, insert, update, delete on public.song_tags to anon;
 grant select, insert, update, delete on public.song_work_tags to anon;
 grant select, insert, update, delete on public.session_review_history to anon;
+grant select, insert, update, delete on public.app_settings to anon;
 
 drop policy if exists "dev select song_tags" on public.song_tags;
 create policy "dev select song_tags" on public.song_tags for select to anon using (true);
@@ -297,6 +305,15 @@ drop policy if exists "dev update session_review_history" on public.session_revi
 create policy "dev update session_review_history" on public.session_review_history for update to anon using (true) with check (true);
 drop policy if exists "dev delete session_review_history" on public.session_review_history;
 create policy "dev delete session_review_history" on public.session_review_history for delete to anon using (true);
+
+drop policy if exists "dev select app_settings" on public.app_settings;
+create policy "dev select app_settings" on public.app_settings for select to anon using (true);
+drop policy if exists "dev insert app_settings" on public.app_settings;
+create policy "dev insert app_settings" on public.app_settings for insert to anon with check (true);
+drop policy if exists "dev update app_settings" on public.app_settings;
+create policy "dev update app_settings" on public.app_settings for update to anon using (true) with check (true);
+drop policy if exists "dev delete app_settings" on public.app_settings;
+create policy "dev delete app_settings" on public.app_settings for delete to anon using (true);
 
 drop policy if exists "dev select writers" on public.writers;
 create policy "dev select writers" on public.writers for select to anon using (true);
