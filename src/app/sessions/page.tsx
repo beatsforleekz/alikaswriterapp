@@ -441,9 +441,21 @@ export default function SessionsPage() {
     setImportMessage(`${nextRows.filter((row) => row.status === "likely_missing").length} likely missing calendar sessions found.`);
   };
 
-  const clearCreatedCalendarBatchRows = () => {
+  const clearReviewedCalendarBatchRows = () => {
     setBatchRows((prev) => {
-      const next = prev.filter((row) => row.status !== "created");
+      const next = prev.filter((row) => !["created", "ignored", "already_logged"].includes(row.status));
+      if (next.length === 0) {
+        setHelperBatchInput("");
+        setImportMessage("");
+        window.localStorage.removeItem(CALENDAR_HELPER_BATCH_KEY);
+      }
+      return next;
+    });
+  };
+
+  const removeCalendarBatchRow = (id: string) => {
+    setBatchRows((prev) => {
+      const next = prev.filter((row) => row.id !== id);
       if (next.length === 0) {
         setHelperBatchInput("");
         setImportMessage("");
@@ -533,7 +545,7 @@ export default function SessionsPage() {
         {viewMode === "calendar" ? (
           <>
             <p className="helper" style={{ marginBottom: ".7rem" }}>Use this shared calendar as a reference while manually logging sessions. Direct import/sync can be added later.</p>
-            <SectionCard title="Unlogged Calendar Sessions" actions={<div className="rowActions compact"><button className="button compact" onClick={clearCreatedCalendarBatchRows}>Clear Created</button><button className="button primary compact" onClick={reviewCalendarBatch}>Review Pasted Events</button></div>}>
+            <SectionCard title="Unlogged Calendar Sessions" actions={<div className="rowActions compact"><button className="button compact" onClick={clearReviewedCalendarBatchRows}>Clear Reviewed</button><button className="button primary compact" onClick={reviewCalendarBatch}>Review Pasted Events</button></div>}>
               <p className="helper" style={{ marginBottom: ".6rem" }}>Paste one event per line, for example: <code>Alika x Alex Hosking x Karim Naas — 8 Jul 2025</code></p>
               <textarea value={helperBatchInput} onChange={(e) => setHelperBatchInput(e.target.value)} placeholder={"Alika x Alex Hosking x Karim Naas — 8 Jul 2025\nTheo Session — 25 Jul 2025\nRobinM Catch Up — 22 Jul 2025"} />
               {batchRows.length ? (
@@ -543,7 +555,7 @@ export default function SessionsPage() {
                   </p>
                   <div className="tableWrap">
                     <table>
-                      <thead><tr><th>Event</th><th>Date</th><th>Suggested Writers</th><th>Status</th><th>Actions</th></tr></thead>
+                      <thead><tr><th>Event</th><th>Date</th><th>Suggested Writers</th><th>Status</th><th>Actions</th><th></th></tr></thead>
                       <tbody>
                         {batchRows.map((item) => (
                           <tr key={item.id}>
@@ -565,6 +577,9 @@ export default function SessionsPage() {
                                 <button className="button compact" disabled={item.status === "already_logged" || item.status === "created" || !item.date} onClick={() => actOnBatchItem(item, "create-open")}>Create + Open Session</button>
                                 <button className="button compact" disabled={item.status === "ignored"} onClick={() => actOnBatchItem(item, "ignore")}>Ignore</button>
                               </div>
+                            </td>
+                            <td style={{ width: "1%", whiteSpace: "nowrap" }}>
+                              <button className="button compact" aria-label={`Remove ${item.title || "calendar row"}`} onClick={() => removeCalendarBatchRow(item.id)}>×</button>
                             </td>
                           </tr>
                         ))}
