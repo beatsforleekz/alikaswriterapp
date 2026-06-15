@@ -209,7 +209,6 @@ export default function Page() {
       <SectionCard title="What Matters" actions={<Link className="button primary" href={overdueActions.length ? "/actions" : holdInterestedResponses.length ? "/playlists" : "/archive-progress"}>{overdueActions.length ? "Handle Overdue Actions" : holdInterestedResponses.length ? "Review Playlist Responses" : "Open Archive Review"}</Link>}>
         <div className="grid cards">
           <StatCard label="Hold/Interested Responses" value={holdInterestedResponses.length} tone={holdInterestedResponses.length ? "amber" : "success"} href="/playlists" />
-          <StatCard label="Unlogged Calendar Sessions In Latest Import" value={calendarSessionsToLog} tone={calendarSessionsToLog ? "amber" : "success"} href="/sessions" />
           <StatCard label="Disputed Songs" value={disputed} tone={disputed ? "danger" : "success"} href="/songs?filter=disputed" />
           <StatCard label="Songs with Pitch Activity" value={pitchedSongs.length} tone={pitchedSongs.length ? "neutral" : "success"} href="/songs?filter=pitched" />
           <StatCard label="Cuts" value={cutsCount} tone={cutsCount ? "neutral" : "success"} href="/cuts" />

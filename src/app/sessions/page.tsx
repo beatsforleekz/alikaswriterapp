@@ -441,6 +441,18 @@ export default function SessionsPage() {
     setImportMessage(`${nextRows.filter((row) => row.status === "likely_missing").length} likely missing calendar sessions found.`);
   };
 
+  const clearCreatedCalendarBatchRows = () => {
+    setBatchRows((prev) => {
+      const next = prev.filter((row) => row.status !== "created");
+      if (next.length === 0) {
+        setHelperBatchInput("");
+        setImportMessage("");
+        window.localStorage.removeItem(CALENDAR_HELPER_BATCH_KEY);
+      }
+      return next;
+    });
+  };
+
   const actOnBatchItem = async (item: CalendarBatchItem, action: "create" | "create-open" | "ignore") => {
     if (action === "ignore") {
       setBatchRows((prev) => prev.map((row) => row.id === item.id ? { ...row, status: "ignored" } : row));
@@ -521,7 +533,7 @@ export default function SessionsPage() {
         {viewMode === "calendar" ? (
           <>
             <p className="helper" style={{ marginBottom: ".7rem" }}>Use this shared calendar as a reference while manually logging sessions. Direct import/sync can be added later.</p>
-            <SectionCard title="Unlogged Calendar Sessions" actions={<button className="button primary compact" onClick={reviewCalendarBatch}>Review Pasted Events</button>}>
+            <SectionCard title="Unlogged Calendar Sessions" actions={<div className="rowActions compact"><button className="button compact" onClick={clearCreatedCalendarBatchRows}>Clear Created</button><button className="button primary compact" onClick={reviewCalendarBatch}>Review Pasted Events</button></div>}>
               <p className="helper" style={{ marginBottom: ".6rem" }}>Paste one event per line, for example: <code>Alika x Alex Hosking x Karim Naas — 8 Jul 2025</code></p>
               <textarea value={helperBatchInput} onChange={(e) => setHelperBatchInput(e.target.value)} placeholder={"Alika x Alex Hosking x Karim Naas — 8 Jul 2025\nTheo Session — 25 Jul 2025\nRobinM Catch Up — 22 Jul 2025"} />
               {batchRows.length ? (
