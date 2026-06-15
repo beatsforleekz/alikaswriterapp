@@ -140,6 +140,9 @@ export default function SessionsPage() {
   const [reviewFilter, setReviewFilter] = useState<"all" | "reviewed" | "not-reviewed" | "needs-follow-up">("all");
   const [sourceFilter, setSourceFilter] = useState<"all" | "manual" | "calendar" | "calendar_import">("all");
   const [evidenceFilter, setEvidenceFilter] = useState<"all" | "weak-partial" | "strong-complete">("all");
+  const [yearFilter, setYearFilter] = useState("all");
+  const [startDateFilter, setStartDateFilter] = useState("");
+  const [endDateFilter, setEndDateFilter] = useState("");
   const initialized = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -230,6 +233,9 @@ export default function SessionsPage() {
     const openStatuses = new Set(["open", "in progress", "pending", "todo"]);
     const filteredRows = rows.filter((session) => {
       if (sourceFilter !== "all" && session.source !== sourceFilter) return false;
+      if (yearFilter !== "all" && !String(session.date || "").startsWith(yearFilter)) return false;
+      if (startDateFilter && String(session.date || "") < startDateFilter) return false;
+      if (endDateFilter && String(session.date || "") > endDateFilter) return false;
       if (reviewFilter === "reviewed" && !session.archive_reviewed) return false;
       if (reviewFilter === "not-reviewed" && session.archive_reviewed) return false;
       if (reviewFilter === "needs-follow-up") {
@@ -255,7 +261,11 @@ export default function SessionsPage() {
       next.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     }
     return next;
-  }, [rows, sortBy, reviewFilter, sourceFilter, evidenceFilter, actions, effectiveStrengthBySession]);
+  }, [rows, sortBy, reviewFilter, sourceFilter, evidenceFilter, actions, effectiveStrengthBySession, yearFilter, startDateFilter, endDateFilter]);
+
+  const yearOptions = useMemo(() => {
+    return Array.from(new Set(rows.map((row) => String(row.date || "").slice(0, 4)).filter(Boolean))).sort((a, b) => b.localeCompare(a));
+  }, [rows]);
 
   const update = async (id: string, key: keyof Session, value: string | boolean) => {
     setError("");
@@ -362,6 +372,15 @@ export default function SessionsPage() {
             {error ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{error}</p> : null}
             {importMessage ? <p className="helper" style={{ marginBottom: ".7rem" }}>{importMessage}</p> : null}
             <div className="rowActions compact" style={{ marginBottom: ".6rem" }}>
+              <label className="helper">Year</label>
+              <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} style={{ maxWidth: 150 }}>
+                <option value="all">All Years</option>
+                {yearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
+              </select>
+              <label className="helper">From</label>
+              <input type="date" value={startDateFilter} onChange={(e) => setStartDateFilter(e.target.value)} style={{ maxWidth: 170 }} />
+              <label className="helper">To</label>
+              <input type="date" value={endDateFilter} onChange={(e) => setEndDateFilter(e.target.value)} style={{ maxWidth: 170 }} />
               <label className="helper">Review</label>
               <select value={reviewFilter} onChange={(e) => setReviewFilter(e.target.value as "all" | "reviewed" | "not-reviewed" | "needs-follow-up")} style={{ maxWidth: 190 }}>
                 <option value="all">All</option>
@@ -390,6 +409,21 @@ export default function SessionsPage() {
                 <option value="recent">Most Recent</option>
                 <option value="added">Date Added</option>
               </select>
+              <button
+                className="button compact"
+                type="button"
+                onClick={() => {
+                  setYearFilter("all");
+                  setStartDateFilter("");
+                  setEndDateFilter("");
+                  setReviewFilter("all");
+                  setSourceFilter("all");
+                  setEvidenceFilter("all");
+                  setSortBy("recent");
+                }}
+              >
+                Clear Filters
+              </button>
             </div>
             <p className="helper" style={{ marginBottom: ".6rem" }}>Archive Reviewed means you have checked this session for the key admin/evidence items you currently know about.</p>
 

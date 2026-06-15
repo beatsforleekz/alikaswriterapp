@@ -21,7 +21,13 @@ const links = [
 export default function Nav() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-  if (pathname.startsWith("/pitch/")) return null;
+  if (pathname.startsWith("/pitch/") || pathname.startsWith("/login")) return null;
+
+  const logout = async () => {
+    await fetch("/api/auth/logout", { method: "POST" });
+    window.location.href = "/login";
+  };
+
   return (
     <aside className="sidebar">
       <div className="brandWrap navTopBar">
@@ -54,6 +60,9 @@ export default function Nav() {
           );
         })}
       </nav>
+      <div style={{ marginTop: "1rem" }}>
+        <button type="button" className="button compact" onClick={logout}>Lock App</button>
+      </div>
     </aside>
   );
 }
