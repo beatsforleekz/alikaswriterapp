@@ -195,6 +195,7 @@ export default function SessionsPage() {
   const [yearFilter, setYearFilter] = useState("all");
   const [startDateFilter, setStartDateFilter] = useState("");
   const [endDateFilter, setEndDateFilter] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const [writerOptions, setWriterOptions] = useState<WriterOption[]>([]);
   const [helperTitle, setHelperTitle] = useState("");
   const [helperDate, setHelperDate] = useState("");
@@ -312,6 +313,15 @@ export default function SessionsPage() {
       if (yearFilter !== "all" && !String(session.date || "").startsWith(yearFilter)) return false;
       if (startDateFilter && String(session.date || "") < startDateFilter) return false;
       if (endDateFilter && String(session.date || "") > endDateFilter) return false;
+      if (searchQuery.trim()) {
+        const haystack = [
+          session.title || "",
+          session.location || "",
+          session.source || "",
+          session.date || "",
+        ].join(" ").toLowerCase();
+        if (!haystack.includes(searchQuery.trim().toLowerCase())) return false;
+      }
       if (reviewFilter === "reviewed" && !session.archive_reviewed) return false;
       if (reviewFilter === "not-reviewed" && session.archive_reviewed) return false;
       if (reviewFilter === "needs-follow-up") {
@@ -337,7 +347,7 @@ export default function SessionsPage() {
       next.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
     }
     return next;
-  }, [rows, sortBy, reviewFilter, sourceFilter, evidenceFilter, actions, effectiveStrengthBySession, yearFilter, startDateFilter, endDateFilter]);
+  }, [rows, sortBy, reviewFilter, sourceFilter, evidenceFilter, actions, effectiveStrengthBySession, yearFilter, startDateFilter, endDateFilter, searchQuery]);
 
   const yearOptions = useMemo(() => {
     return Array.from(new Set(rows.map((row) => String(row.date || "").slice(0, 4)).filter(Boolean))).sort((a, b) => b.localeCompare(a));
@@ -511,23 +521,6 @@ export default function SessionsPage() {
         {viewMode === "calendar" ? (
           <>
             <p className="helper" style={{ marginBottom: ".7rem" }}>Use this shared calendar as a reference while manually logging sessions. Direct import/sync can be added later.</p>
-            <SectionCard title="Create Session from Calendar Event" actions={<div className="rowActions compact"><button className="button compact" onClick={() => createHelperSession(false)}>Create Session</button><button className="button primary compact" onClick={() => createHelperSession(true)}>Create + Open Session</button></div>}>
-              <div className="kv">
-                <dt>Calendar event title</dt><dd><input value={helperTitle} onChange={(e) => setHelperTitle(e.target.value)} placeholder="Alika x Alex Hosking x Karim Naas" /></dd>
-                <dt>Event date</dt><dd><input type="date" value={helperDate} onChange={(e) => setHelperDate(e.target.value)} /></dd>
-                <dt>Location</dt><dd><input value={helperLocation} onChange={(e) => setHelperLocation(e.target.value)} placeholder="Studio / Remote / Venue" /></dd>
-                <dt>Event details</dt><dd><textarea value={helperDetails} onChange={(e) => setHelperDetails(e.target.value)} placeholder="Optional event details or notes" /></dd>
-                <dt>Suggested writers</dt>
-                <dd>
-                  <div className="rowActions compact" style={{ flexWrap: "wrap" }}>
-                    {helperSuggestions.suggestedWriters.length ? helperSuggestions.suggestedWriters.map((writer) => (
-                      <span key={writer} className={`statusBadge ${helperSuggestions.matchedWriters.includes(writer) ? "sage" : "amber"}`}>{writer}</span>
-                    )) : <span className="helper">Paste a title to see writer suggestions.</span>}
-                  </div>
-                  {helperSuggestions.matchedWriters.length ? <p className="helper" style={{ marginTop: ".35rem" }}>Matched saved writers: {helperSuggestions.matchedWriters.join(", ")}</p> : null}
-                </dd>
-              </div>
-            </SectionCard>
             <SectionCard title="Unlogged Calendar Sessions" actions={<button className="button primary compact" onClick={reviewCalendarBatch}>Review Pasted Events</button>}>
               <p className="helper" style={{ marginBottom: ".6rem" }}>Paste one event per line, for example: <code>Alika x Alex Hosking x Karim Naas — 8 Jul 2025</code></p>
               <textarea value={helperBatchInput} onChange={(e) => setHelperBatchInput(e.target.value)} placeholder={"Alika x Alex Hosking x Karim Naas — 8 Jul 2025\nTheo Session — 25 Jul 2025\nRobinM Catch Up — 22 Jul 2025"} />
@@ -568,6 +561,32 @@ export default function SessionsPage() {
                   </div>
                 </>
               ) : null}
+            </SectionCard>
+            <SectionCard title="Create Session from Calendar Event">
+              <details>
+                <summary style={{ cursor: "pointer", fontWeight: 600, color: "#4e3b2d" }}>Open helper</summary>
+                <div style={{ marginTop: ".85rem" }}>
+                  <div className="rowActions compact" style={{ justifyContent: "flex-end", marginBottom: ".75rem" }}>
+                    <button className="button compact" onClick={() => createHelperSession(false)}>Create Session</button>
+                    <button className="button primary compact" onClick={() => createHelperSession(true)}>Create + Open Session</button>
+                  </div>
+                  <div className="kv">
+                    <dt>Calendar event title</dt><dd><input value={helperTitle} onChange={(e) => setHelperTitle(e.target.value)} placeholder="Alika x Alex Hosking x Karim Naas" /></dd>
+                    <dt>Event date</dt><dd><input type="date" value={helperDate} onChange={(e) => setHelperDate(e.target.value)} /></dd>
+                    <dt>Location</dt><dd><input value={helperLocation} onChange={(e) => setHelperLocation(e.target.value)} placeholder="Studio / Remote / Venue" /></dd>
+                    <dt>Event details</dt><dd><textarea value={helperDetails} onChange={(e) => setHelperDetails(e.target.value)} placeholder="Optional event details or notes" /></dd>
+                    <dt>Suggested writers</dt>
+                    <dd>
+                      <div className="rowActions compact" style={{ flexWrap: "wrap" }}>
+                        {helperSuggestions.suggestedWriters.length ? helperSuggestions.suggestedWriters.map((writer) => (
+                          <span key={writer} className={`statusBadge ${helperSuggestions.matchedWriters.includes(writer) ? "sage" : "amber"}`}>{writer}</span>
+                        )) : <span className="helper">Paste a title to see writer suggestions.</span>}
+                      </div>
+                      {helperSuggestions.matchedWriters.length ? <p className="helper" style={{ marginTop: ".35rem" }}>Matched saved writers: {helperSuggestions.matchedWriters.join(", ")}</p> : null}
+                    </dd>
+                  </div>
+                </div>
+              </details>
             </SectionCard>
             <iframe
               title="Session Calendar"
@@ -616,6 +635,7 @@ export default function SessionsPage() {
                     setYearFilter("all");
                     setStartDateFilter("");
                     setEndDateFilter("");
+                    setSearchQuery("");
                     setReviewFilter("all");
                     setSourceFilter("all");
                     setEvidenceFilter("all");
@@ -626,6 +646,14 @@ export default function SessionsPage() {
                 </button>
               </div>
               <div className="sessionFilterGrid">
+                <label className="sessionFilterField" style={{ gridColumn: "1 / -1" }}>
+                  <span>Search</span>
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search title, location, source, or date"
+                  />
+                </label>
                 <label className="sessionFilterField">
                   <span>Year</span>
                   <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>

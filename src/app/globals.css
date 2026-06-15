@@ -81,6 +81,31 @@ textarea { min-height: 92px; }
 .statLabel { color: var(--muted); font-size: .84rem; margin-bottom: .32rem; }
 .statValue { font-size: 1.45rem; font-weight: 600; font-family: "Avenir Next", "Segoe UI", Arial, sans-serif; }
 
+.reportCardButton {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, #fffdfb 0%, #f8f2ec 100%);
+  border-radius: 14px;
+  padding: .95rem;
+  box-shadow: var(--shadow);
+  transition: transform .12s ease, border-color .12s ease, box-shadow .12s ease, background .12s ease;
+}
+.reportCardButton:hover {
+  transform: translateY(-1px);
+  border-color: #c8b29d;
+  box-shadow: 0 10px 20px rgba(59, 44, 35, 0.12);
+}
+.reportCardButton.active {
+  border-color: #b79052;
+  background: linear-gradient(180deg, #fff5ea 0%, #f5e8d8 100%);
+  box-shadow: 0 12px 24px rgba(59, 44, 35, 0.14);
+}
+.reportCardButton strong {
+  display: block;
+  font-size: 1rem;
+}
+
 .filterBar { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: .7rem; display: flex; gap: .6rem; flex-wrap: wrap; margin-bottom: .8rem; }
 .sessionFilterBar {
   margin-bottom: .85rem;
@@ -253,6 +278,31 @@ tr:hover td { background: #f8f2ec; }
   font-size: 1rem;
   margin-top: .45rem;
   margin-bottom: .35rem;
+}
+
+@media print {
+  .noPrint,
+  .sidebar,
+  .pageHeader .rowActions,
+  .navToggle {
+    display: none !important;
+  }
+  body {
+    background: #fff;
+  }
+  .appShell,
+  .mainArea,
+  .contentWrap {
+    display: block;
+    padding: 0;
+    max-width: none;
+  }
+  .sectionCard,
+  .tableWrap,
+  .reportPrintArea {
+    box-shadow: none;
+    border-color: #d7cabc;
+  }
 }
 
 @media (max-width: 980px) {

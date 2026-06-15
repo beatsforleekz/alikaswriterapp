@@ -270,7 +270,7 @@ export default function SettingsPage() {
 
       <SectionCard title="Admin / Export">
         <div className="rowActions" style={{ flexWrap: "wrap" }}>
-          <Link className="button" href="/exports">Export Catalogue</Link>
+          <Link className="button" href="/reports">Open Reports Hub</Link>
           <Link className="button" href="/archive-progress">Export Archive Review Summary</Link>
           <Link className="button" href="/playlists">Export Pitch History</Link>
           <span className="statusBadge">Database backup/export: use Supabase project backup/export tools</span>

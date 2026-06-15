@@ -36,6 +36,15 @@ export default function HelpPage() {
           <li>Filtered Songs/Works lists can be exported as CSV for catalogue/admin follow-up.</li>
         </ul>
       </SectionCard>
+      <SectionCard title="Reports">
+        <p>Reports is the central export hub for archive, catalogue, pitch, cuts, and evidence workflows.</p>
+        <ul style={{ paddingLeft: "1.2rem", marginTop: ".5rem" }}>
+          <li>Use Reports for CSV exports across Songs/Works, Sessions, Archive Review, Actions, Playlists, Cuts, and Writer/Split summaries.</li>
+          <li>Browser print/save-to-PDF is available for printable summaries like Archive Review Summary, Evidence Gaps, No Bounce, No Acapella, Cuts, and Playlist Pitch Activity.</li>
+          <li>Missing asset reports include No Bounce, No Acapella, No Lyrics, No Audio / Pitch Audio, Weak/Partial Evidence, Missing Writers/Splits, Unreviewed Sessions, and Open Follow-ups.</li>
+          <li>Filters support practical combinations such as date range, reviewed status, evidence strength, writer, tag, missing asset type, cut status, pitch readiness, and playlist response status.</li>
+        </ul>
+      </SectionCard>
       <SectionCard title="List sorting"><p>Sessions, Songs/Works, and Actions support consistent sorting controls: <strong>A-Z</strong>, <strong>Z-A</strong>, <strong>Date (Oldest)</strong>, <strong>Most Recent</strong>, and <strong>Date Added</strong>.</p></SectionCard>
       <SectionCard title="Session Filters"><p>Sessions now support quick filtering by year and by date range.</p><ul style={{ paddingLeft: "1.2rem", marginTop: ".5rem" }}><li>Use the <strong>Year</strong> filter for a fast annual view.</li><li>Use <strong>From</strong> and <strong>To</strong> to search between specific dates.</li><li><strong>Clear Filters</strong> resets the view back to the full session list.</li></ul></SectionCard>
       <SectionCard title="Evidence checklist basics"><p><strong>Required assets</strong></p><ul style={{ paddingLeft: "1.2rem" }}><li>Bounce link</li><li>Lyrics link</li></ul><p style={{ marginTop: "0.6rem" }}><strong>Optional assets</strong></p><ul style={{ paddingLeft: "1.2rem" }}><li>voice note link</li><li>Google Doc link</li><li>Apple Note reference/link</li><li>instrumental link</li><li>acapella link</li><li>Dropbox folder link</li><li>emails/messages</li><li>screenshots</li><li>session file/project link</li><li>other evidence</li></ul></SectionCard>

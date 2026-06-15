@@ -11,7 +11,7 @@ const links = [
   ["/songs", "Songs / Works"],
   ["/cuts", "Cuts"],
   ["/playlists", "Playlists"],
-  ["/exports", "Exports"],
+  ["/reports", "Reports"],
   ["/actions", "Actions"],
   ["/progress-hub", "Progress Hub"],
   ["/settings", "Settings"],
