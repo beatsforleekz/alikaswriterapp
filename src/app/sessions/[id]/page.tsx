@@ -210,6 +210,27 @@ export default function SessionDetailPage() {
 
   useEffect(() => { load(); }, [params.id]);
 
+  useEffect(() => {
+    const transientWriterErrors = [
+      "Could not add writer/split: select a valid linked song.",
+      "Could not add writer/split: writer name is required.",
+      "Could not add writer/split: split must be a number.",
+      "Select a source song to duplicate splits from.",
+      "Select at least one target song.",
+      "Selected source song has no writer/split rows yet.",
+      "Could not update split: split must be a number.",
+    ];
+    if (!transientWriterErrors.includes(errorMsg)) return;
+    setErrorMsg("");
+  }, [
+    songs.length,
+    writerSongId,
+    writerNameInput,
+    writerSplitInput,
+    duplicateSourceSongId,
+    duplicateTargetSongIds,
+  ]);
+
   const evidenceChecks = useMemo(() => {
     const safeSession = session ?? null;
     const safeSongs = songs ?? [];
