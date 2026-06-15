@@ -103,6 +103,20 @@ export default function CutsPage() {
     }
   })();
 
+  const syncSongStatusToCut = async (songId: string) => {
+    const { data: songRow, error } = await supabase
+      .from("song_works")
+      .select("status")
+      .eq("id", songId)
+      .single();
+    if (error || !songRow) return;
+    const currentStatus = String((songRow as { status?: string | null }).status ?? "");
+    const protectedStatuses = new Set(["Released", "Disputed", "Registered", "Complete"]);
+    if (protectedStatuses.has(currentStatus)) return;
+    if (currentStatus === "Cut") return;
+    await supabase.from("song_works").update({ status: "Cut" }).eq("id", songId);
+  };
+
   const load = async () => {
     const [cutRes, songRes] = await Promise.all([
       supabase.from("cut_records").select("*").order("created_at", { ascending: false }),
@@ -175,6 +189,7 @@ export default function CutsPage() {
       setErrorMsg(supabaseUserMessage("Could not create cut record", error));
       return;
     }
+    await syncSongStatusToCut(newCutSongId);
     if (data) router.push(`/cuts/${String((data as { id: string }).id)}`);
   };
 
@@ -214,6 +229,7 @@ export default function CutsPage() {
       setErrorMsg(supabaseUserMessage("Could not create cut record from imported metadata", error));
       return;
     }
+    await syncSongStatusToCut(newCutSongId);
     if (data) router.push(`/cuts/${String((data as { id: string }).id)}`);
   };
 
