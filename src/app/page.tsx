@@ -17,6 +17,8 @@ type ReviewEventRef = { created_at: string; event_type: string; session_id: stri
 type PlaylistRef = { id: string; title: string };
 type PlaylistTrackRef = { id: string; playlist_id: string; song_work_id: string };
 type PlaylistResponseRef = { id: string; playlist_id: string; playlist_track_id?: string | null; response_type: string; sender_name?: string | null; created_at: string };
+type CalendarBatchItem = { status: "already_logged" | "possible_duplicate" | "likely_missing" | "created" | "ignored" };
+const CALENDAR_HELPER_BATCH_KEY = "calendar_session_helper_batch_v1";
 
 export default function Page() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -29,9 +31,19 @@ export default function Page() {
   const [playlistTracks, setPlaylistTracks] = useState<PlaylistTrackRef[]>([]);
   const [playlistResponses, setPlaylistResponses] = useState<PlaylistResponseRef[]>([]);
   const [skip, setSkip] = useState(false);
+  const [calendarBatchRows, setCalendarBatchRows] = useState<CalendarBatchItem[]>([]);
 
   useEffect(() => {
     setSkip(new URLSearchParams(window.location.search).get("skip") === "1");
+    try {
+      const raw = window.localStorage.getItem(CALENDAR_HELPER_BATCH_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as CalendarBatchItem[];
+        if (Array.isArray(parsed)) setCalendarBatchRows(parsed);
+      }
+    } catch {
+      // ignore malformed cache
+    }
     const load = async () => {
       const [sRes, soRes, aRes, assetRes, splitRes, reviewRes, plRes, trackRes, responseRes] = await Promise.all([
         supabase.from("sessions").select("*").order("date", { ascending: false }),
@@ -176,6 +188,7 @@ export default function Page() {
   const cutsCount = songs.filter((s) => s.status === "Cut").length;
   const weakEvidenceSessions = sessions.filter((s) => !s.evidence_strength || s.evidence_strength === "Weak" || s.evidence_strength === "Partial");
   const topBlockerSongs = readinessItems.filter((r) => r.status !== "Ready to Pitch").slice(0, 5);
+  const calendarSessionsToLog = calendarBatchRows.filter((row) => row.status === "likely_missing").length;
 
   return (
     <div>
@@ -192,6 +205,7 @@ export default function Page() {
       <SectionCard title="What Matters" actions={<Link className="button primary" href={overdueActions.length ? "/actions" : holdInterestedResponses.length ? "/playlists" : "/archive-progress"}>{overdueActions.length ? "Handle Overdue Actions" : holdInterestedResponses.length ? "Review Playlist Responses" : "Open Archive Review"}</Link>}>
         <div className="grid cards">
           <StatCard label="Hold/Interested Responses" value={holdInterestedResponses.length} tone={holdInterestedResponses.length ? "amber" : "success"} href="/playlists" />
+          <StatCard label="Calendar Sessions To Log" value={calendarSessionsToLog} tone={calendarSessionsToLog ? "amber" : "success"} href="/sessions" />
           <StatCard label="Disputed Songs" value={disputed} tone={disputed ? "danger" : "success"} href="/songs?filter=disputed" />
           <StatCard label="Songs with Pitch Activity" value={pitchedSongs.length} tone={pitchedSongs.length ? "neutral" : "success"} href="/songs?filter=pitched" />
           <StatCard label="Cuts" value={cutsCount} tone={cutsCount ? "neutral" : "success"} href="/cuts" />

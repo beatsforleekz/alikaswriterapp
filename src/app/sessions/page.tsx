@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { mapSession } from "@/lib/mappers";
@@ -16,6 +17,20 @@ type SongRow = { id: string; session_id?: string | null; bounce_link?: string | 
 type AssetRow = { song_id: string; type: string; url?: string | null };
 type SplitRow = { song_id: string; percentage?: number | null };
 type ActionRow = { session_id?: string | null; status?: string | null };
+type WriterOption = { id: string; name: string };
+type CalendarBatchItem = {
+  id: string;
+  title: string;
+  date: string;
+  location: string;
+  details: string;
+  suggestedWriters: string[];
+  matchedWriters: string[];
+  status: "already_logged" | "possible_duplicate" | "likely_missing" | "created" | "ignored";
+  matchedSessionId?: string;
+};
+
+const CALENDAR_HELPER_BATCH_KEY = "calendar_session_helper_batch_v1";
 
 const unfoldIcs = (text: string) => text.replace(/\r\n/g, "\n").split("\n").reduce<string[]>((a, l) => {
   if ((l.startsWith(" ") || l.startsWith("\t")) && a.length) a[a.length - 1] += l.trimStart();
@@ -24,6 +39,42 @@ const unfoldIcs = (text: string) => text.replace(/\r\n/g, "\n").split("\n").redu
 }, []);
 const normalizeText = (v: string) => v.toLowerCase().replace(/[^a-z0-9]/g, "");
 const similarTitle = (a: string, b: string) => { const x = normalizeText(a), y = normalizeText(b); return x === y || x.includes(y) || y.includes(x); };
+const formatIsoDate = (value: Date) => {
+  const year = value.getFullYear();
+  const month = `${value.getMonth() + 1}`.padStart(2, "0");
+  const day = `${value.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+function parseLooseDate(value: string) {
+  const input = value.trim();
+  if (!input) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input)) return input;
+  const parsed = new Date(input.replace(/\./g, " "));
+  if (Number.isNaN(parsed.getTime())) return "";
+  return formatIsoDate(parsed);
+}
+function splitSuggestedWriters(title: string, writerOptions: WriterOption[]) {
+  const rawParts = title
+    .replace(/\s+feat\.?\s+/gi, " x ")
+    .replace(/\s+and\s+/gi, " x ")
+    .replace(/\s*&\s*/g, " x ")
+    .replace(/\s*,\s*/g, " x ")
+    .split(/\s+x\s+/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const deduped = Array.from(new Set(rawParts.map((part) => part.replace(/\s+/g, " ").trim())));
+  const filtered = deduped.filter((name) => normalizeText(name) !== "alika");
+  const matchedWriters = filtered
+    .filter((name) => writerOptions.some((writer) => normalizeText(writer.name) === normalizeText(name)));
+  return { suggestedWriters: filtered, matchedWriters };
+}
+function compareCalendarItemToSessions(title: string, date: string, sessions: Session[]) {
+  const exact = sessions.find((session) => session.date === date && similarTitle(session.title || "", title));
+  if (exact) return { status: "already_logged" as const, matchedSessionId: exact.id };
+  const near = sessions.find((session) => session.date === date || similarTitle(session.title || "", title));
+  if (near) return { status: "possible_duplicate" as const, matchedSessionId: near.id };
+  return { status: "likely_missing" as const, matchedSessionId: undefined };
+}
 function parseIcsDate(value: string) {
   if (!value) return { date: "", text: "" };
   if (/^\d{8}$/.test(value)) {
@@ -124,6 +175,7 @@ function autoStrengthForSession(session: Session, songs: SongRow[], assets: Asse
 }
 
 export default function SessionsPage() {
+  const router = useRouter();
   const [viewMode, setViewMode] = useState<"calendar" | "records">("records");
   const [rows, setRows] = useState<Session[]>([]);
   const [songs, setSongs] = useState<SongRow[]>([]);
@@ -143,19 +195,27 @@ export default function SessionsPage() {
   const [yearFilter, setYearFilter] = useState("all");
   const [startDateFilter, setStartDateFilter] = useState("");
   const [endDateFilter, setEndDateFilter] = useState("");
+  const [writerOptions, setWriterOptions] = useState<WriterOption[]>([]);
+  const [helperTitle, setHelperTitle] = useState("");
+  const [helperDate, setHelperDate] = useState("");
+  const [helperLocation, setHelperLocation] = useState("");
+  const [helperDetails, setHelperDetails] = useState("");
+  const [helperBatchInput, setHelperBatchInput] = useState("");
+  const [batchRows, setBatchRows] = useState<CalendarBatchItem[]>([]);
   const initialized = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = async () => {
-    const [sessionRes, songRes, assetRes, splitRes, actionRes] = await Promise.all([
+    const [sessionRes, songRes, assetRes, splitRes, actionRes, writerRes] = await Promise.all([
       supabase.from("sessions").select("*").order("date", { ascending: false }),
       supabase.from("song_works").select("id,session_id,bounce_link,lyrics_link"),
       supabase.from("asset_links").select("song_id,type,url"),
       supabase.from("song_writer_splits").select("song_id,percentage"),
       supabase.from("action_items").select("session_id,status"),
+      supabase.from("writers").select("id,name").order("name", { ascending: true }),
     ]);
-    if (sessionRes.error || songRes.error || assetRes.error || splitRes.error || actionRes.error) {
-      const e = sessionRes.error || songRes.error || assetRes.error || splitRes.error || actionRes.error;
+    if (sessionRes.error || songRes.error || assetRes.error || splitRes.error || actionRes.error || writerRes.error) {
+      const e = sessionRes.error || songRes.error || assetRes.error || splitRes.error || actionRes.error || writerRes.error;
       logSupabaseError("Failed to load sessions", e);
       setError(supabaseUserMessage("Could not load sessions", e));
       return;
@@ -165,8 +225,24 @@ export default function SessionsPage() {
     setAssets((assetRes.data ?? []) as AssetRow[]);
     setSplits((splitRes.data ?? []) as SplitRow[]);
     setActions((actionRes.data ?? []) as ActionRow[]);
+    setWriterOptions((writerRes.data ?? []) as WriterOption[]);
   };
   useEffect(() => { load(); }, []);
+
+  useEffect(() => {
+    const raw = window.localStorage.getItem(CALENDAR_HELPER_BATCH_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as CalendarBatchItem[];
+      if (Array.isArray(parsed)) setBatchRows(parsed);
+    } catch {
+      // ignore malformed local cache
+    }
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(CALENDAR_HELPER_BATCH_KEY, JSON.stringify(batchRows));
+  }, [batchRows]);
 
   const effectiveStrengthBySession = useMemo(() => {
     const out: Record<string, { value: string; source: "manual" | "auto" }> = {};
@@ -267,6 +343,104 @@ export default function SessionsPage() {
     return Array.from(new Set(rows.map((row) => String(row.date || "").slice(0, 4)).filter(Boolean))).sort((a, b) => b.localeCompare(a));
   }, [rows]);
 
+  const helperSuggestions = useMemo(() => splitSuggestedWriters(helperTitle, writerOptions), [helperTitle, writerOptions]);
+
+  const createSessionFromCalendarData = async (payload: { title: string; date: string; location?: string; details?: string; suggestedWriters?: string[] }, openAfterSave?: boolean) => {
+    const cleanTitle = payload.title.trim();
+    const cleanDate = payload.date.trim();
+    if (!cleanTitle || !cleanDate) {
+      setError("Calendar helper needs both title and date.");
+      return null;
+    }
+    const noteBits = [
+      payload.details?.trim() || "",
+      payload.suggestedWriters?.length ? `Suggested writers: ${payload.suggestedWriters.join(", ")}` : "",
+    ].filter(Boolean);
+    const { data, error: insertErr } = await supabase
+      .from("sessions")
+      .insert({
+        title: cleanTitle,
+        date: cleanDate,
+        location: payload.location?.trim() || "",
+        source: "calendar",
+        archive_reviewed: false,
+        archive_review_notes: noteBits.join("\n\n") || null,
+      })
+      .select("id")
+      .single();
+    if (insertErr || !data) {
+      logSupabaseError("Failed to create session from calendar helper", insertErr);
+      setError(supabaseUserMessage("Could not create session from calendar helper", insertErr));
+      return null;
+    }
+    await load();
+    if (openAfterSave) {
+      router.push(`/sessions/${String((data as { id: string }).id)}`);
+    }
+    return String((data as { id: string }).id);
+  };
+
+  const createHelperSession = async (openAfterSave?: boolean) => {
+    const createdId = await createSessionFromCalendarData(
+      {
+        title: helperTitle,
+        date: helperDate,
+        location: helperLocation,
+        details: helperDetails,
+        suggestedWriters: helperSuggestions.suggestedWriters,
+      },
+      openAfterSave,
+    );
+    if (!createdId) return;
+    setImportMessage(openAfterSave ? "Session created and opened." : "Session created from calendar helper.");
+    setHelperTitle("");
+    setHelperDate("");
+    setHelperLocation("");
+    setHelperDetails("");
+  };
+
+  const reviewCalendarBatch = () => {
+    const lines = helperBatchInput
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (!lines.length) {
+      setError("Paste at least one calendar event line to review.");
+      return;
+    }
+    const nextRows = lines.map((line) => {
+      const parts = line.split(/\s+[—-]\s+/);
+      const title = (parts[0] || line).trim();
+      const dateText = parts.length > 1 ? parts[parts.length - 1].trim() : "";
+      const date = parseLooseDate(dateText);
+      const suggestion = splitSuggestedWriters(title, writerOptions);
+      const comparison = compareCalendarItemToSessions(title, date, rows);
+      return {
+        id: crypto.randomUUID(),
+        title,
+        date,
+        location: "",
+        details: line,
+        suggestedWriters: suggestion.suggestedWriters,
+        matchedWriters: suggestion.matchedWriters,
+        status: comparison.status,
+        matchedSessionId: comparison.matchedSessionId,
+      } satisfies CalendarBatchItem;
+    });
+    setBatchRows(nextRows);
+    setImportMessage(`${nextRows.filter((row) => row.status === "likely_missing").length} likely missing calendar sessions found.`);
+  };
+
+  const actOnBatchItem = async (item: CalendarBatchItem, action: "create" | "create-open" | "ignore") => {
+    if (action === "ignore") {
+      setBatchRows((prev) => prev.map((row) => row.id === item.id ? { ...row, status: "ignored" } : row));
+      return;
+    }
+    const createdId = await createSessionFromCalendarData(item, action === "create-open");
+    if (!createdId) return;
+    setBatchRows((prev) => prev.map((row) => row.id === item.id ? { ...row, status: "created", matchedSessionId: createdId } : row));
+  };
+
   const update = async (id: string, key: keyof Session, value: string | boolean) => {
     setError("");
     setRows((r) => r.map((x) => (x.id === id ? { ...x, [key]: value } : x)));
@@ -337,6 +511,64 @@ export default function SessionsPage() {
         {viewMode === "calendar" ? (
           <>
             <p className="helper" style={{ marginBottom: ".7rem" }}>Use this shared calendar as a reference while manually logging sessions. Direct import/sync can be added later.</p>
+            <SectionCard title="Create Session from Calendar Event" actions={<div className="rowActions compact"><button className="button compact" onClick={() => createHelperSession(false)}>Create Session</button><button className="button primary compact" onClick={() => createHelperSession(true)}>Create + Open Session</button></div>}>
+              <div className="kv">
+                <dt>Calendar event title</dt><dd><input value={helperTitle} onChange={(e) => setHelperTitle(e.target.value)} placeholder="Alika x Alex Hosking x Karim Naas" /></dd>
+                <dt>Event date</dt><dd><input type="date" value={helperDate} onChange={(e) => setHelperDate(e.target.value)} /></dd>
+                <dt>Location</dt><dd><input value={helperLocation} onChange={(e) => setHelperLocation(e.target.value)} placeholder="Studio / Remote / Venue" /></dd>
+                <dt>Event details</dt><dd><textarea value={helperDetails} onChange={(e) => setHelperDetails(e.target.value)} placeholder="Optional event details or notes" /></dd>
+                <dt>Suggested writers</dt>
+                <dd>
+                  <div className="rowActions compact" style={{ flexWrap: "wrap" }}>
+                    {helperSuggestions.suggestedWriters.length ? helperSuggestions.suggestedWriters.map((writer) => (
+                      <span key={writer} className={`statusBadge ${helperSuggestions.matchedWriters.includes(writer) ? "sage" : "amber"}`}>{writer}</span>
+                    )) : <span className="helper">Paste a title to see writer suggestions.</span>}
+                  </div>
+                  {helperSuggestions.matchedWriters.length ? <p className="helper" style={{ marginTop: ".35rem" }}>Matched saved writers: {helperSuggestions.matchedWriters.join(", ")}</p> : null}
+                </dd>
+              </div>
+            </SectionCard>
+            <SectionCard title="Unlogged Calendar Sessions" actions={<button className="button primary compact" onClick={reviewCalendarBatch}>Review Pasted Events</button>}>
+              <p className="helper" style={{ marginBottom: ".6rem" }}>Paste one event per line, for example: <code>Alika x Alex Hosking x Karim Naas — 8 Jul 2025</code></p>
+              <textarea value={helperBatchInput} onChange={(e) => setHelperBatchInput(e.target.value)} placeholder={"Alika x Alex Hosking x Karim Naas — 8 Jul 2025\nTheo Session — 25 Jul 2025\nRobinM Catch Up — 22 Jul 2025"} />
+              {batchRows.length ? (
+                <>
+                  <p className="helper" style={{ marginTop: ".6rem" }}>
+                    {batchRows.filter((row) => row.status === "likely_missing").length} missing · {batchRows.filter((row) => row.status === "already_logged").length} already logged · {batchRows.filter((row) => row.status === "possible_duplicate").length} possible duplicate
+                  </p>
+                  <div className="tableWrap">
+                    <table>
+                      <thead><tr><th>Event</th><th>Date</th><th>Suggested Writers</th><th>Status</th><th>Actions</th></tr></thead>
+                      <tbody>
+                        {batchRows.map((item) => (
+                          <tr key={item.id}>
+                            <td>
+                              <strong>{item.title || "Untitled"}</strong>
+                              {item.details ? <div className="helper" style={{ marginTop: ".25rem" }}>{item.details}</div> : null}
+                            </td>
+                            <td>{item.date || <span className="helper">Add date</span>}</td>
+                            <td>{item.suggestedWriters.length ? item.suggestedWriters.join(", ") : <span className="helper">No suggestions</span>}</td>
+                            <td>
+                              <span className={`statusBadge ${item.status === "likely_missing" ? "amber" : item.status === "already_logged" || item.status === "created" ? "sage" : item.status === "ignored" ? "coffee" : "rose"}`}>
+                                {item.status === "likely_missing" ? "Likely Missing" : item.status === "already_logged" ? "Already Logged" : item.status === "possible_duplicate" ? "Possible Duplicate" : item.status === "created" ? "Created" : "Ignored"}
+                              </span>
+                              {item.matchedSessionId ? <div className="helper" style={{ marginTop: ".25rem" }}><Link href={`/sessions/${item.matchedSessionId}`}>Open matched session</Link></div> : null}
+                            </td>
+                            <td>
+                              <div className="rowActions compact">
+                                <button className="button compact" disabled={item.status === "already_logged" || item.status === "created" || !item.date} onClick={() => actOnBatchItem(item, "create")}>Create Session</button>
+                                <button className="button compact" disabled={item.status === "already_logged" || item.status === "created" || !item.date} onClick={() => actOnBatchItem(item, "create-open")}>Create + Open Session</button>
+                                <button className="button compact" disabled={item.status === "ignored"} onClick={() => actOnBatchItem(item, "ignore")}>Ignore</button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </SectionCard>
             <iframe
               title="Session Calendar"
               src="https://calendar.google.com/calendar/embed?src=fqpihr2loirht1lhkue8ihmlko%40group.calendar.google.com&ctz=Europe%2FLondon"
@@ -371,59 +603,81 @@ export default function SessionsPage() {
 
             {error ? <p className="helper" style={{ color: "#8a3d3d", marginBottom: ".7rem" }}>{error}</p> : null}
             {importMessage ? <p className="helper" style={{ marginBottom: ".7rem" }}>{importMessage}</p> : null}
-            <div className="rowActions compact" style={{ marginBottom: ".6rem" }}>
-              <label className="helper">Year</label>
-              <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} style={{ maxWidth: 150 }}>
-                <option value="all">All Years</option>
-                {yearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
-              </select>
-              <label className="helper">From</label>
-              <input type="date" value={startDateFilter} onChange={(e) => setStartDateFilter(e.target.value)} style={{ maxWidth: 170 }} />
-              <label className="helper">To</label>
-              <input type="date" value={endDateFilter} onChange={(e) => setEndDateFilter(e.target.value)} style={{ maxWidth: 170 }} />
-              <label className="helper">Review</label>
-              <select value={reviewFilter} onChange={(e) => setReviewFilter(e.target.value as "all" | "reviewed" | "not-reviewed" | "needs-follow-up")} style={{ maxWidth: 190 }}>
-                <option value="all">All</option>
-                <option value="reviewed">Reviewed</option>
-                <option value="not-reviewed">Not Reviewed</option>
-                <option value="needs-follow-up">Needs Follow-up</option>
-              </select>
-              <label className="helper">Source</label>
-              <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as "all" | "manual" | "calendar" | "calendar_import")} style={{ maxWidth: 190 }}>
-                <option value="all">All Sources</option>
-                <option value="manual">Manual</option>
-                <option value="calendar">Calendar</option>
-                <option value="calendar_import">Calendar Import</option>
-              </select>
-              <label className="helper">Evidence</label>
-              <select value={evidenceFilter} onChange={(e) => setEvidenceFilter(e.target.value as "all" | "weak-partial" | "strong-complete")} style={{ maxWidth: 190 }}>
-                <option value="all">All Evidence</option>
-                <option value="weak-partial">Weak/Partial</option>
-                <option value="strong-complete">Strong/Complete</option>
-              </select>
-              <label className="helper">Sort</label>
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "za" | "date" | "recent" | "added")} style={{ maxWidth: 200 }}>
-                <option value="az">A-Z</option>
-                <option value="za">Z-A</option>
-                <option value="date">Date (Oldest)</option>
-                <option value="recent">Most Recent</option>
-                <option value="added">Date Added</option>
-              </select>
-              <button
-                className="button compact"
-                type="button"
-                onClick={() => {
-                  setYearFilter("all");
-                  setStartDateFilter("");
-                  setEndDateFilter("");
-                  setReviewFilter("all");
-                  setSourceFilter("all");
-                  setEvidenceFilter("all");
-                  setSortBy("recent");
-                }}
-              >
-                Clear Filters
-              </button>
+            <div className="sessionFilterBar">
+              <div className="sessionFilterTop">
+                <div>
+                  <p className="sessionFilterTitle">Filter Sessions</p>
+                  <p className="helper">{sortedRows.length} result{sortedRows.length === 1 ? "" : "s"}</p>
+                </div>
+                <button
+                  className="button compact"
+                  type="button"
+                  onClick={() => {
+                    setYearFilter("all");
+                    setStartDateFilter("");
+                    setEndDateFilter("");
+                    setReviewFilter("all");
+                    setSourceFilter("all");
+                    setEvidenceFilter("all");
+                    setSortBy("recent");
+                  }}
+                >
+                  Clear Filters
+                </button>
+              </div>
+              <div className="sessionFilterGrid">
+                <label className="sessionFilterField">
+                  <span>Year</span>
+                  <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)}>
+                    <option value="all">All Years</option>
+                    {yearOptions.map((year) => <option key={year} value={year}>{year}</option>)}
+                  </select>
+                </label>
+                <label className="sessionFilterField">
+                  <span>From</span>
+                  <input type="date" value={startDateFilter} onChange={(e) => setStartDateFilter(e.target.value)} />
+                </label>
+                <label className="sessionFilterField">
+                  <span>To</span>
+                  <input type="date" value={endDateFilter} onChange={(e) => setEndDateFilter(e.target.value)} />
+                </label>
+                <label className="sessionFilterField">
+                  <span>Review</span>
+                  <select value={reviewFilter} onChange={(e) => setReviewFilter(e.target.value as "all" | "reviewed" | "not-reviewed" | "needs-follow-up")}>
+                    <option value="all">All</option>
+                    <option value="reviewed">Reviewed</option>
+                    <option value="not-reviewed">Not Reviewed</option>
+                    <option value="needs-follow-up">Needs Follow-up</option>
+                  </select>
+                </label>
+                <label className="sessionFilterField">
+                  <span>Source</span>
+                  <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value as "all" | "manual" | "calendar" | "calendar_import")}>
+                    <option value="all">All Sources</option>
+                    <option value="manual">Manual</option>
+                    <option value="calendar">Calendar</option>
+                    <option value="calendar_import">Calendar Import</option>
+                  </select>
+                </label>
+                <label className="sessionFilterField">
+                  <span>Evidence</span>
+                  <select value={evidenceFilter} onChange={(e) => setEvidenceFilter(e.target.value as "all" | "weak-partial" | "strong-complete")}>
+                    <option value="all">All Evidence</option>
+                    <option value="weak-partial">Weak/Partial</option>
+                    <option value="strong-complete">Strong/Complete</option>
+                  </select>
+                </label>
+                <label className="sessionFilterField">
+                  <span>Sort</span>
+                  <select value={sortBy} onChange={(e) => setSortBy(e.target.value as "az" | "za" | "date" | "recent" | "added")}>
+                    <option value="az">A-Z</option>
+                    <option value="za">Z-A</option>
+                    <option value="date">Date (Oldest)</option>
+                    <option value="recent">Most Recent</option>
+                    <option value="added">Date Added</option>
+                  </select>
+                </label>
+              </div>
             </div>
             <p className="helper" style={{ marginBottom: ".6rem" }}>Archive Reviewed means you have checked this session for the key admin/evidence items you currently know about.</p>
 
